@@ -1,8 +1,13 @@
 {assign var="yif_data" value=fn_yandex_image_finder_get_product_block_data($product_id, $product_data)}
 {assign var="yif_settings" value=$yif_data.settings_summary}
-{assign var="yif_result_id" value="yif_results_`$product_id`"}
+{assign var="yif_context" value=$yif_context|default:"tab"}
+{assign var="yif_result_id" value="yif_results_`$yif_context`_`$product_id`"}
 
-<div class="yif-product-tab">
+<div class="yif-product-tab yif-product-tab--{$yif_context|escape}">
+    {if $yif_compact}
+        <h4 class="yif-panel-title">{__("yif_search_images_via_yandex")}</h4>
+    {/if}
+
     {if !$yif_settings.credentials_ready || !$yif_settings.folder_ready}
         <div class="alert alert-warning">{__("yif_settings_not_ready")}</div>
     {/if}
@@ -18,7 +23,7 @@
 
     <form action="{""|fn_url}"
           method="post"
-          name="yif_search_form_{$product_id}"
+          name="yif_search_form_{$yif_context}_{$product_id}"
           class="cm-ajax yif-search-form"
           data-ca-target-id="{$yif_result_id}">
         <input type="hidden" name="security_hash" value="{""|fn_generate_security_hash}" />
@@ -27,13 +32,13 @@
         <input type="hidden" name="page" value="0" />
 
         <div class="control-group">
-            <label class="control-label" for="yif_query_{$product_id}">{__("yif_query")}</label>
+            <label class="control-label" for="yif_query_{$yif_context}_{$product_id}">{__("yif_query")}</label>
             <div class="controls yif-search-controls">
                 <input type="text"
-                       id="yif_query_{$product_id}"
+                       id="yif_query_{$yif_context}_{$product_id}"
                        name="query"
                        value="{$yif_data.default_query|escape}"
-                       class="input-xxlarge" />
+                       class="{if $yif_compact}input-xlarge{else}input-xxlarge{/if}" />
                 <button type="submit"
                         class="btn btn-primary"
                         name="dispatch[yandex_image_finder.search]">
@@ -43,5 +48,5 @@
         </div>
     </form>
 
-    {include file="addons/yandex_image_finder/views/yandex_image_finder/components/results.tpl" yif_data=$yif_data}
+    {include file="addons/yandex_image_finder/views/yandex_image_finder/components/results.tpl" yif_data=$yif_data yif_result_id=$yif_result_id}
 </div>

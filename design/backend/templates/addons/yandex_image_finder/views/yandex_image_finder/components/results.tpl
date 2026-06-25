@@ -1,4 +1,4 @@
-{assign var="yif_result_id" value="yif_results_`$yif_data.product_id`"}
+{assign var="yif_result_id" value=$yif_result_id|default:"yif_results_`$yif_data.product_id`"}
 {assign var="yif_settings" value=$yif_data.settings_summary}
 
 <div id="{$yif_result_id}" class="yif-results">

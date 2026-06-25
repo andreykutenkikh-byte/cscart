@@ -17,6 +17,9 @@ $schema['yandex_image_finder'] = [
         'import' => [
             'permissions' => 'manage_catalog',
         ],
+        'test_connection' => [
+            'permissions' => 'manage_catalog',
+        ],
     ],
 ];
 

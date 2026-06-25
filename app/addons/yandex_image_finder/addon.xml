@@ -243,6 +243,20 @@
         <item lang="en" id="yif_settings_not_ready">Yandex credentials or Folder ID are not configured.</item>
         <item lang="en" id="yif_original_url">Original image URL</item>
         <item lang="en" id="yif_source_page_url">Source page URL</item>
+        <item lang="en" id="yif_test_connection">Test Yandex connection</item>
+        <item lang="en" id="yif_test_connection_success">Connection successful: Yandex Search API responded, rawData received, candidates found: [count].</item>
+        <item lang="en" id="yif_missing_yandex_credentials">Yandex credentials are not configured.</item>
+        <item lang="en" id="yif_missing_yandex_folder_id">Yandex Folder ID is not configured.</item>
+        <item lang="en" id="yif_yandex_http_401">Yandex Search API returned HTTP 401: invalid API key or IAM token.</item>
+        <item lang="en" id="yif_yandex_http_403">Yandex Search API returned HTTP 403: missing role, likely search-api.webSearch.user.</item>
+        <item lang="en" id="yif_yandex_http_400">Yandex Search API returned HTTP 400: invalid request or Folder ID.</item>
+        <item lang="en" id="yif_yandex_http_429">Yandex Search API returned HTTP 429: quota or rate limit exceeded.</item>
+        <item lang="en" id="yif_yandex_http_error">Yandex Search API returned HTTP status [status].</item>
+        <item lang="en" id="yif_yandex_http_unknown">Yandex Search API did not return a valid HTTP response.</item>
+        <item lang="en" id="yif_yandex_invalid_json">Yandex Search API returned invalid JSON.</item>
+        <item lang="en" id="yif_yandex_missing_raw_data">Yandex Search API response does not contain rawData.</item>
+        <item lang="en" id="yif_yandex_raw_data_base64_error">Yandex rawData is not valid Base64.</item>
+        <item lang="en" id="yif_yandex_xml_parse_error">Yandex rawData XML parse error.</item>
 
         <item lang="ru" id="yandex_image_finder">Yandex Image Finder</item>
         <item lang="ru" id="yif_search_images_via_yandex">Поиск изображений через Яндекс</item>
@@ -266,6 +280,20 @@
         <item lang="ru" id="yif_settings_not_ready">Не настроены учетные данные Yandex или Folder ID.</item>
         <item lang="ru" id="yif_original_url">URL оригинального изображения</item>
         <item lang="ru" id="yif_source_page_url">URL страницы-источника</item>
+        <item lang="ru" id="yif_test_connection">Проверить подключение к Яндексу</item>
+        <item lang="ru" id="yif_test_connection_success">Подключение успешно: Yandex Search API ответил, rawData получен, найдено кандидатов: [count].</item>
+        <item lang="ru" id="yif_missing_yandex_credentials">Не настроены учетные данные Yandex.</item>
+        <item lang="ru" id="yif_missing_yandex_folder_id">Не настроен Folder ID Yandex.</item>
+        <item lang="ru" id="yif_yandex_http_401">Yandex Search API вернул HTTP 401: неверный API-ключ или IAM-токен.</item>
+        <item lang="ru" id="yif_yandex_http_403">Yandex Search API вернул HTTP 403: нет роли, вероятно search-api.webSearch.user.</item>
+        <item lang="ru" id="yif_yandex_http_400">Yandex Search API вернул HTTP 400: неверный запрос или Folder ID.</item>
+        <item lang="ru" id="yif_yandex_http_429">Yandex Search API вернул HTTP 429: превышена квота или лимит запросов.</item>
+        <item lang="ru" id="yif_yandex_http_error">Yandex Search API вернул HTTP [status].</item>
+        <item lang="ru" id="yif_yandex_http_unknown">Yandex Search API не вернул корректный HTTP-ответ.</item>
+        <item lang="ru" id="yif_yandex_invalid_json">Yandex Search API вернул некорректный JSON.</item>
+        <item lang="ru" id="yif_yandex_missing_raw_data">Ответ Yandex Search API не содержит rawData.</item>
+        <item lang="ru" id="yif_yandex_raw_data_base64_error">Yandex rawData не является корректным Base64.</item>
+        <item lang="ru" id="yif_yandex_xml_parse_error">Ошибка разбора XML из Yandex rawData.</item>
     </language_variables>
     <queries>
         <item for="install">
