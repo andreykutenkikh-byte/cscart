@@ -15,10 +15,13 @@
 - `design/backend/templates/addons/yandex_image_finder/views/yandex_image_finder/components/results.tpl`
 - `design/backend/templates/addons/yandex_image_finder/views/yandex_image_finder/components/test_connection_result.tpl`
 - `design/backend/css/addons/yandex_image_finder/styles.less`
+- `.gitignore`
+- `tools/package_yandex_image_finder.py`
+- `tools/CS_CART_ADDON_PACKAGING.md`
 
 ## Installation steps
 
-1. Package the add-on ZIP with `app/`, `design/`, and `var/` at archive root.
+1. Build the add-on ZIP with `python tools/package_yandex_image_finder.py`.
 2. Upload it in CS-Cart admin through **Add-ons -> Manage add-ons -> Upload & install add-on**.
 3. Enable **Yandex Image Finder**.
 4. Save add-on settings before running the connection test.
@@ -50,6 +53,7 @@
 - `php app/addons/yandex_image_finder/tests/isolated_checks.php`
 - `addon.xml` parse check through `simplexml_load_file`.
 - `git diff --check`
+- Package structure check: ZIP entries use `/`, contain `app/addons/yandex_image_finder/addon.xml`, and pass CS-Cart structure validation after extraction.
 - Confirmed no CS-Cart core files changed.
 - No deployment performed.
 
@@ -68,3 +72,4 @@
 - Inline product panel is placed after the standard image block via `products:update_detailed_images`; there was no core modification.
 - Settings connection test uses saved settings, not unsaved form input.
 - Thumbnail proxying is documented but not implemented.
+- Do not package with PowerShell `Compress-Archive`; it creates Windows-style ZIP entries that CS-Cart cannot detect as a valid add-on structure.
