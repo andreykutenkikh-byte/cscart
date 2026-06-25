@@ -605,12 +605,7 @@ function fn_yandex_image_finder_import_candidate($candidate_id, $product_id, $im
         return false;
     }
 
-    $checksum_id = db_get_field(
-        'SELECT candidate_id FROM ?:yandex_image_finder_candidates WHERE product_id = ?i AND checksum = ?s AND status = ?s',
-        $product_id,
-        $download['checksum'],
-        YIF_STATUS_IMPORTED
-    );
+    $checksum_id = fn_yandex_image_finder_find_imported_checksum_duplicate($product_id, $download['checksum']);
     if ($checksum_id) {
         @unlink($download['path']);
         $result['message'] = __('yif_already_imported');
@@ -691,6 +686,21 @@ function fn_yandex_image_finder_attach_product_image($product_id, array $candida
     return (int) $pair_ids;
 }
 
+function fn_yandex_image_finder_find_imported_checksum_duplicate($product_id, $checksum)
+{
+    $checksum = (string) $checksum;
+    if ($checksum === '') {
+        return 0;
+    }
+
+    return (int) db_get_field(
+        'SELECT candidate_id FROM ?:yandex_image_finder_candidates WHERE product_id = ?i AND checksum = ?s AND status = ?s',
+        $product_id,
+        $checksum,
+        YIF_STATUS_IMPORTED
+    );
+}
+
 function fn_yandex_image_finder_mark_candidate_failed($candidate_id, $message)
 {
     db_query(
@@ -725,6 +735,13 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
     $redirects_left = 3;
 
     while ($redirects_left >= 0) {
+        $resolve_entries = [];
+        $resolved_ips = [];
+        if (!fn_yandex_image_finder_prepare_url_for_curl($current_url, $resolve_entries, $resolved_ips, $safe_error)) {
+            $error_message = $safe_error;
+            return false;
+        }
+
         $tmp = tempnam(YIF_TEMP_DIR, 'yif_');
         $fp = fopen($tmp, 'wb');
         if (!$fp) {
@@ -768,10 +785,14 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
         if (defined('CURLOPT_REDIR_PROTOCOLS')) {
             curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
         }
+        if ($resolve_entries) {
+            curl_setopt($ch, CURLOPT_RESOLVE, $resolve_entries);
+        }
 
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $content_type = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $primary_ip = defined('CURLINFO_PRIMARY_IP') ? (string) curl_getinfo($ch, CURLINFO_PRIMARY_IP) : '';
         $curl_error = curl_error($ch);
         curl_close($ch);
         fclose($fp);
@@ -779,6 +800,18 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
         if ($limit_exceeded) {
             @unlink($tmp);
             $error_message = 'Image exceeds maximum allowed file size.';
+            return false;
+        }
+
+        if ($ok === false) {
+            @unlink($tmp);
+            $error_message = $curl_error !== '' ? $curl_error : 'Unable to download image URL.';
+            return false;
+        }
+
+        if (!fn_yandex_image_finder_is_primary_ip_allowed($primary_ip, $resolved_ips)) {
+            @unlink($tmp);
+            $error_message = 'Image URL connected to a private, reserved, or unvalidated IP.';
             return false;
         }
 
@@ -794,9 +827,9 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
             continue;
         }
 
-        if ($ok === false || $status !== 200) {
+        if ($status !== 200) {
             @unlink($tmp);
-            $error_message = $curl_error !== '' ? $curl_error : 'Image URL returned HTTP status ' . $status;
+            $error_message = 'Image URL returned HTTP status ' . $status;
             return false;
         }
 
@@ -811,7 +844,7 @@ function fn_yandex_image_finder_validate_downloaded_image($tmp, $content_type, $
 {
     $content_type = strtolower(trim(explode(';', (string) $content_type)[0]));
     $allowed = fn_yandex_image_finder_get_allowed_mime_types();
-    if (!isset($allowed[$content_type])) {
+    if (!fn_yandex_image_finder_is_allowed_mime_type($content_type)) {
         @unlink($tmp);
         $error_message = 'Unsupported image content type: ' . ($content_type !== '' ? $content_type : 'unknown');
         return false;
@@ -870,6 +903,14 @@ function fn_yandex_image_finder_get_allowed_mime_types()
     ];
 }
 
+function fn_yandex_image_finder_is_allowed_mime_type($content_type)
+{
+    $content_type = strtolower(trim(explode(';', (string) $content_type)[0]));
+    $allowed = fn_yandex_image_finder_get_allowed_mime_types();
+
+    return isset($allowed[$content_type]);
+}
+
 function fn_yandex_image_finder_ensure_temp_dir()
 {
     if (is_dir(YIF_TEMP_DIR)) {
@@ -882,8 +923,9 @@ function fn_yandex_image_finder_ensure_temp_dir()
     return mkdir(YIF_TEMP_DIR, 0755, true);
 }
 
-function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
+function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '', array &$resolved_ips = [])
 {
+    $resolved_ips = [];
     $parts = parse_url((string) $url);
     if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
         $error_message = 'Invalid image URL.';
@@ -900,7 +942,7 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
         return false;
     }
 
-    $host = strtolower(rtrim($parts['host'], '.'));
+    $host = fn_yandex_image_finder_normalize_host($parts['host']);
     if (!fn_yandex_image_finder_is_domain_allowed($host)) {
         $error_message = 'Image source domain is not allowed.';
         return false;
@@ -910,15 +952,16 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
         return false;
     }
 
-    $ips = fn_yandex_image_finder_resolve_host($host);
-    if (!$ips) {
+    $resolved_ips = fn_yandex_image_finder_resolve_host($host);
+    if (!$resolved_ips) {
         $error_message = 'Unable to resolve image host.';
         return false;
     }
 
-    foreach ($ips as $ip) {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+    foreach ($resolved_ips as $ip) {
+        if (!fn_yandex_image_finder_is_public_ip($ip)) {
             $error_message = 'Image URL resolves to a private or reserved IP.';
+            $resolved_ips = [];
             return false;
         }
     }
@@ -926,8 +969,58 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
     return true;
 }
 
+function fn_yandex_image_finder_prepare_url_for_curl($url, array &$resolve_entries, array &$resolved_ips, &$error_message = '')
+{
+    $resolve_entries = [];
+    if (!fn_yandex_image_finder_is_url_safe_to_fetch($url, $error_message, $resolved_ips)) {
+        return false;
+    }
+
+    $parts = parse_url((string) $url);
+    $scheme = strtolower($parts['scheme']);
+    $host = fn_yandex_image_finder_normalize_host($parts['host']);
+    $port = isset($parts['port']) ? (int) $parts['port'] : ($scheme === 'https' ? 443 : 80);
+
+    if (!filter_var($host, FILTER_VALIDATE_IP)) {
+        if (!defined('CURLOPT_RESOLVE')) {
+            $resolved_ips = [];
+            $error_message = 'cURL DNS pinning support is required to download external hostnames.';
+            return false;
+        }
+
+        foreach ($resolved_ips as $ip) {
+            $resolve_entries[] = $host . ':' . $port . ':' . $ip;
+        }
+    }
+
+    return true;
+}
+
+function fn_yandex_image_finder_is_primary_ip_allowed($primary_ip, array $resolved_ips)
+{
+    $primary_ip = fn_yandex_image_finder_normalize_host($primary_ip);
+    if ($primary_ip === '' || !fn_yandex_image_finder_is_public_ip($primary_ip)) {
+        return false;
+    }
+
+    return in_array($primary_ip, array_map('fn_yandex_image_finder_normalize_host', $resolved_ips), true);
+}
+
+function fn_yandex_image_finder_is_public_ip($ip)
+{
+    $ip = fn_yandex_image_finder_normalize_host($ip);
+
+    return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+}
+
+function fn_yandex_image_finder_normalize_host($host)
+{
+    return strtolower(rtrim(trim((string) $host, "[] \t\n\r\0\x0B"), '.'));
+}
+
 function fn_yandex_image_finder_resolve_host($host)
 {
+    $host = fn_yandex_image_finder_normalize_host($host);
     if (filter_var($host, FILTER_VALIDATE_IP)) {
         return [$host];
     }

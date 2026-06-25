@@ -21,6 +21,7 @@
           name="yif_search_form_{$product_id}"
           class="cm-ajax yif-search-form"
           data-ca-target-id="{$yif_result_id}">
+        <input type="hidden" name="security_hash" value="{""|fn_generate_security_hash}" />
         <input type="hidden" name="product_id" value="{$product_id}" />
         <input type="hidden" name="result_ids" value="{$yif_result_id}" />
         <input type="hidden" name="page" value="0" />

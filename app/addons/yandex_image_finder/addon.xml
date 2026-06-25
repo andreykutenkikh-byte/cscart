@@ -38,14 +38,14 @@
                         <translations>
                             <item lang="ru" for="name">API-ключ Yandex</item>
                         </translations>
-                        <type>input</type>
+                        <type>password</type>
                     </item>
                     <item id="iam_token">
                         <name>Yandex IAM token</name>
                         <translations>
                             <item lang="ru" for="name">IAM-токен Yandex</item>
                         </translations>
-                        <type>input</type>
+                        <type>password</type>
                     </item>
                     <item id="folder_id">
                         <name>Yandex Folder ID</name>

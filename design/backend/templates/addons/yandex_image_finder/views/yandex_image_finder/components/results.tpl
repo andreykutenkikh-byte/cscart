@@ -68,6 +68,7 @@
 
                         {if $candidate.status == "new"}
                             <form action="{""|fn_url}" method="post" class="cm-ajax yif-inline-form" data-ca-target-id="{$yif_result_id}">
+                                <input type="hidden" name="security_hash" value="{""|fn_generate_security_hash}" />
                                 <input type="hidden" name="result_ids" value="{$yif_result_id}" />
                                 <input type="hidden" name="product_id" value="{$yif_data.product_id}" />
                                 <input type="hidden" name="session_id" value="{$candidate.session_id}" />
@@ -78,6 +79,7 @@
                             </form>
 
                             <form action="{""|fn_url}" method="post" class="cm-ajax yif-inline-form" data-ca-target-id="{$yif_result_id}">
+                                <input type="hidden" name="security_hash" value="{""|fn_generate_security_hash}" />
                                 <input type="hidden" name="result_ids" value="{$yif_result_id}" />
                                 <input type="hidden" name="product_id" value="{$yif_data.product_id}" />
                                 <input type="hidden" name="session_id" value="{$candidate.session_id}" />
@@ -93,6 +95,7 @@
 
                             {if $yif_settings.enable_set_main == "Y"}
                                 <form action="{""|fn_url}" method="post" class="cm-ajax yif-inline-form" data-ca-target-id="{$yif_result_id}">
+                                    <input type="hidden" name="security_hash" value="{""|fn_generate_security_hash}" />
                                     <input type="hidden" name="result_ids" value="{$yif_result_id}" />
                                     <input type="hidden" name="product_id" value="{$yif_data.product_id}" />
                                     <input type="hidden" name="session_id" value="{$candidate.session_id}" />
