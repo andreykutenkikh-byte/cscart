@@ -236,8 +236,7 @@ function fn_yandex_image_finder_search($product_id, $query, $page, &$session_id,
         return [];
     }
 
-    if (!fn_yandex_image_finder_has_credentials() || fn_yandex_image_finder_get_setting('folder_id') === '') {
-        $error_message = 'Yandex API credentials or Folder ID are not configured.';
+    if (!fn_yandex_image_finder_validate_yandex_search_settings($error_message)) {
         return [];
     }
 
@@ -292,13 +291,46 @@ function fn_yandex_image_finder_search($product_id, $query, $page, &$session_id,
     return $stored_candidates;
 }
 
-function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_response_hash, &$error_message)
+function fn_yandex_image_finder_validate_yandex_search_settings(&$error_message = '')
 {
-    if (!function_exists('curl_init')) {
-        $error_message = 'PHP cURL extension is required.';
+    if (!fn_yandex_image_finder_has_credentials()) {
+        $error_message = __('yif_missing_yandex_credentials');
+        return false;
+    }
+    if (fn_yandex_image_finder_get_setting('folder_id') === '') {
+        $error_message = __('yif_missing_yandex_folder_id');
+        return false;
+    }
+
+    return true;
+}
+
+function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_response_hash, &$error_message, $http_client = null)
+{
+    if (!fn_yandex_image_finder_validate_yandex_search_settings($error_message)) {
         return [];
     }
 
+    $body = fn_yandex_image_finder_build_yandex_search_body($query, $page, $docs_on_page);
+    $headers = fn_yandex_image_finder_build_yandex_auth_headers();
+    $timeout = fn_yandex_image_finder_get_int_setting('request_timeout', 10, 1, 60);
+    $response_data = fn_yandex_image_finder_send_yandex_search_request($body, $headers, $timeout, $http_client);
+    $response = $response_data['response'];
+    $status = $response_data['status'];
+    $curl_error = $response_data['error'];
+
+    if ($response === false || $status < 200 || $status >= 300) {
+        $error_message = $curl_error !== '' && $status === 0
+            ? 'Yandex Search API request failed: ' . $curl_error
+            : fn_yandex_image_finder_map_yandex_http_error($status);
+        return [];
+    }
+
+    return fn_yandex_image_finder_parse_yandex_response($response, $raw_response_hash, $error_message);
+}
+
+function fn_yandex_image_finder_build_yandex_search_body($query, $page, $docs_on_page)
+{
     $body = [
         'query' => [
             'searchType'  => fn_yandex_image_finder_get_setting('search_type', 'SEARCH_TYPE_RU'),
@@ -325,6 +357,11 @@ function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_
         }
     }
 
+    return $body;
+}
+
+function fn_yandex_image_finder_build_yandex_auth_headers()
+{
     $headers = ['Content-Type: application/json'];
     if (fn_yandex_image_finder_get_setting('auth_mode', 'api_key') === 'iam_token') {
         $headers[] = 'Authorization: Bearer ' . fn_yandex_image_finder_get_setting('iam_token');
@@ -332,7 +369,36 @@ function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_
         $headers[] = 'Authorization: Api-Key ' . fn_yandex_image_finder_get_setting('api_key');
     }
 
-    $timeout = fn_yandex_image_finder_get_int_setting('request_timeout', 10, 1, 60);
+    return $headers;
+}
+
+function fn_yandex_image_finder_send_yandex_search_request(array $body, array $headers, $timeout, $http_client = null)
+{
+    if (is_callable($http_client)) {
+        $result = call_user_func($http_client, $body, $headers, $timeout);
+        if (!is_array($result)) {
+            return [
+                'response' => false,
+                'status'   => 0,
+                'error'    => 'Injected Yandex HTTP client returned an invalid response.',
+            ];
+        }
+
+        return [
+            'response' => array_key_exists('response', $result) ? $result['response'] : false,
+            'status'   => isset($result['status']) ? (int) $result['status'] : 0,
+            'error'    => isset($result['error']) ? (string) $result['error'] : '',
+        ];
+    }
+
+    if (!function_exists('curl_init')) {
+        return [
+            'response' => false,
+            'status'   => 0,
+            'error'    => 'PHP cURL extension is required.',
+        ];
+    }
+
     $ch = curl_init('https://searchapi.api.cloud.yandex.net/v2/image/search');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
@@ -349,15 +415,41 @@ function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_
     $curl_error = curl_error($ch);
     curl_close($ch);
 
-    if ($response === false || $status < 200 || $status >= 300) {
-        $error_message = $curl_error !== '' ? $curl_error : 'Yandex API HTTP status ' . $status;
-        return [];
+    return [
+        'response' => $response,
+        'status'   => $status,
+        'error'    => $curl_error,
+    ];
+}
+
+function fn_yandex_image_finder_map_yandex_http_error($status)
+{
+    $status = (int) $status;
+    if ($status === 401) {
+        return __('yif_yandex_http_401');
+    }
+    if ($status === 403) {
+        return __('yif_yandex_http_403');
+    }
+    if ($status === 400) {
+        return __('yif_yandex_http_400');
+    }
+    if ($status === 429) {
+        return __('yif_yandex_http_429');
+    }
+    if ($status > 0) {
+        return str_replace('[status]', (string) $status, __('yif_yandex_http_error'));
     }
 
+    return __('yif_yandex_http_unknown');
+}
+
+function fn_yandex_image_finder_parse_yandex_response($response, &$raw_response_hash, &$error_message)
+{
     $raw_response_hash = hash('sha256', $response);
     $decoded = json_decode($response, true);
     if (!is_array($decoded)) {
-        $error_message = 'Yandex API returned invalid JSON.';
+        $error_message = __('yif_yandex_invalid_json');
         return [];
     }
 
@@ -366,18 +458,46 @@ function fn_yandex_image_finder_call_yandex($query, $page, $docs_on_page, &$raw_
         $raw_data = $decoded['response']['rawData'];
     }
     if ($raw_data === '') {
-        $error_message = 'Yandex API response does not contain rawData.';
+        $error_message = __('yif_yandex_missing_raw_data');
         return [];
     }
 
     return fn_yandex_image_finder_parse_raw_data($raw_data, $error_message);
 }
 
+function fn_yandex_image_finder_test_connection(&$result, $http_client = null)
+{
+    $result = [
+        'success'          => false,
+        'message'          => '',
+        'candidates_count' => 0,
+    ];
+
+    $error_message = '';
+    if (!fn_yandex_image_finder_validate_yandex_search_settings($error_message)) {
+        $result['message'] = $error_message;
+        return false;
+    }
+
+    $raw_response_hash = '';
+    $candidates = fn_yandex_image_finder_call_yandex('test image', 0, 1, $raw_response_hash, $error_message, $http_client);
+    if ($error_message !== '') {
+        $result['message'] = $error_message;
+        return false;
+    }
+
+    $result['success'] = true;
+    $result['candidates_count'] = count($candidates);
+    $result['message'] = str_replace('[count]', (string) $result['candidates_count'], __('yif_test_connection_success'));
+
+    return true;
+}
+
 function fn_yandex_image_finder_parse_raw_data($raw_data, &$error_message = '')
 {
     $xml = base64_decode($raw_data, true);
     if ($xml === false) {
-        $error_message = 'Yandex rawData is not valid Base64.';
+        $error_message = __('yif_yandex_raw_data_base64_error');
         return [];
     }
 
@@ -392,7 +512,7 @@ function fn_yandex_image_finder_parse_xml($xml, &$error_message = '')
     libxml_use_internal_errors($previous);
 
     if (!$document) {
-        $error_message = 'Yandex XML could not be parsed.';
+        $error_message = __('yif_yandex_xml_parse_error');
         return [];
     }
 
@@ -605,12 +725,7 @@ function fn_yandex_image_finder_import_candidate($candidate_id, $product_id, $im
         return false;
     }
 
-    $checksum_id = db_get_field(
-        'SELECT candidate_id FROM ?:yandex_image_finder_candidates WHERE product_id = ?i AND checksum = ?s AND status = ?s',
-        $product_id,
-        $download['checksum'],
-        YIF_STATUS_IMPORTED
-    );
+    $checksum_id = fn_yandex_image_finder_find_imported_checksum_duplicate($product_id, $download['checksum']);
     if ($checksum_id) {
         @unlink($download['path']);
         $result['message'] = __('yif_already_imported');
@@ -691,6 +806,21 @@ function fn_yandex_image_finder_attach_product_image($product_id, array $candida
     return (int) $pair_ids;
 }
 
+function fn_yandex_image_finder_find_imported_checksum_duplicate($product_id, $checksum)
+{
+    $checksum = (string) $checksum;
+    if ($checksum === '') {
+        return 0;
+    }
+
+    return (int) db_get_field(
+        'SELECT candidate_id FROM ?:yandex_image_finder_candidates WHERE product_id = ?i AND checksum = ?s AND status = ?s',
+        $product_id,
+        $checksum,
+        YIF_STATUS_IMPORTED
+    );
+}
+
 function fn_yandex_image_finder_mark_candidate_failed($candidate_id, $message)
 {
     db_query(
@@ -725,6 +855,13 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
     $redirects_left = 3;
 
     while ($redirects_left >= 0) {
+        $resolve_entries = [];
+        $resolved_ips = [];
+        if (!fn_yandex_image_finder_prepare_url_for_curl($current_url, $resolve_entries, $resolved_ips, $safe_error)) {
+            $error_message = $safe_error;
+            return false;
+        }
+
         $tmp = tempnam(YIF_TEMP_DIR, 'yif_');
         $fp = fopen($tmp, 'wb');
         if (!$fp) {
@@ -768,10 +905,14 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
         if (defined('CURLOPT_REDIR_PROTOCOLS')) {
             curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
         }
+        if ($resolve_entries) {
+            curl_setopt($ch, CURLOPT_RESOLVE, $resolve_entries);
+        }
 
         $ok = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $content_type = (string) curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $primary_ip = defined('CURLINFO_PRIMARY_IP') ? (string) curl_getinfo($ch, CURLINFO_PRIMARY_IP) : '';
         $curl_error = curl_error($ch);
         curl_close($ch);
         fclose($fp);
@@ -779,6 +920,18 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
         if ($limit_exceeded) {
             @unlink($tmp);
             $error_message = 'Image exceeds maximum allowed file size.';
+            return false;
+        }
+
+        if ($ok === false) {
+            @unlink($tmp);
+            $error_message = $curl_error !== '' ? $curl_error : 'Unable to download image URL.';
+            return false;
+        }
+
+        if (!fn_yandex_image_finder_is_primary_ip_allowed($primary_ip, $resolved_ips)) {
+            @unlink($tmp);
+            $error_message = 'Image URL connected to a private, reserved, or unvalidated IP.';
             return false;
         }
 
@@ -794,9 +947,9 @@ function fn_yandex_image_finder_download_image($url, $candidate_id, array &$down
             continue;
         }
 
-        if ($ok === false || $status !== 200) {
+        if ($status !== 200) {
             @unlink($tmp);
-            $error_message = $curl_error !== '' ? $curl_error : 'Image URL returned HTTP status ' . $status;
+            $error_message = 'Image URL returned HTTP status ' . $status;
             return false;
         }
 
@@ -811,7 +964,7 @@ function fn_yandex_image_finder_validate_downloaded_image($tmp, $content_type, $
 {
     $content_type = strtolower(trim(explode(';', (string) $content_type)[0]));
     $allowed = fn_yandex_image_finder_get_allowed_mime_types();
-    if (!isset($allowed[$content_type])) {
+    if (!fn_yandex_image_finder_is_allowed_mime_type($content_type)) {
         @unlink($tmp);
         $error_message = 'Unsupported image content type: ' . ($content_type !== '' ? $content_type : 'unknown');
         return false;
@@ -870,6 +1023,14 @@ function fn_yandex_image_finder_get_allowed_mime_types()
     ];
 }
 
+function fn_yandex_image_finder_is_allowed_mime_type($content_type)
+{
+    $content_type = strtolower(trim(explode(';', (string) $content_type)[0]));
+    $allowed = fn_yandex_image_finder_get_allowed_mime_types();
+
+    return isset($allowed[$content_type]);
+}
+
 function fn_yandex_image_finder_ensure_temp_dir()
 {
     if (is_dir(YIF_TEMP_DIR)) {
@@ -882,8 +1043,9 @@ function fn_yandex_image_finder_ensure_temp_dir()
     return mkdir(YIF_TEMP_DIR, 0755, true);
 }
 
-function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
+function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '', array &$resolved_ips = [])
 {
+    $resolved_ips = [];
     $parts = parse_url((string) $url);
     if (!$parts || empty($parts['scheme']) || empty($parts['host'])) {
         $error_message = 'Invalid image URL.';
@@ -900,7 +1062,7 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
         return false;
     }
 
-    $host = strtolower(rtrim($parts['host'], '.'));
+    $host = fn_yandex_image_finder_normalize_host($parts['host']);
     if (!fn_yandex_image_finder_is_domain_allowed($host)) {
         $error_message = 'Image source domain is not allowed.';
         return false;
@@ -910,15 +1072,16 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
         return false;
     }
 
-    $ips = fn_yandex_image_finder_resolve_host($host);
-    if (!$ips) {
+    $resolved_ips = fn_yandex_image_finder_resolve_host($host);
+    if (!$resolved_ips) {
         $error_message = 'Unable to resolve image host.';
         return false;
     }
 
-    foreach ($ips as $ip) {
-        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+    foreach ($resolved_ips as $ip) {
+        if (!fn_yandex_image_finder_is_public_ip($ip)) {
             $error_message = 'Image URL resolves to a private or reserved IP.';
+            $resolved_ips = [];
             return false;
         }
     }
@@ -926,8 +1089,58 @@ function fn_yandex_image_finder_is_url_safe_to_fetch($url, &$error_message = '')
     return true;
 }
 
+function fn_yandex_image_finder_prepare_url_for_curl($url, array &$resolve_entries, array &$resolved_ips, &$error_message = '')
+{
+    $resolve_entries = [];
+    if (!fn_yandex_image_finder_is_url_safe_to_fetch($url, $error_message, $resolved_ips)) {
+        return false;
+    }
+
+    $parts = parse_url((string) $url);
+    $scheme = strtolower($parts['scheme']);
+    $host = fn_yandex_image_finder_normalize_host($parts['host']);
+    $port = isset($parts['port']) ? (int) $parts['port'] : ($scheme === 'https' ? 443 : 80);
+
+    if (!filter_var($host, FILTER_VALIDATE_IP)) {
+        if (!defined('CURLOPT_RESOLVE')) {
+            $resolved_ips = [];
+            $error_message = 'cURL DNS pinning support is required to download external hostnames.';
+            return false;
+        }
+
+        foreach ($resolved_ips as $ip) {
+            $resolve_entries[] = $host . ':' . $port . ':' . $ip;
+        }
+    }
+
+    return true;
+}
+
+function fn_yandex_image_finder_is_primary_ip_allowed($primary_ip, array $resolved_ips)
+{
+    $primary_ip = fn_yandex_image_finder_normalize_host($primary_ip);
+    if ($primary_ip === '' || !fn_yandex_image_finder_is_public_ip($primary_ip)) {
+        return false;
+    }
+
+    return in_array($primary_ip, array_map('fn_yandex_image_finder_normalize_host', $resolved_ips), true);
+}
+
+function fn_yandex_image_finder_is_public_ip($ip)
+{
+    $ip = fn_yandex_image_finder_normalize_host($ip);
+
+    return (bool) filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+}
+
+function fn_yandex_image_finder_normalize_host($host)
+{
+    return strtolower(rtrim(trim((string) $host, "[] \t\n\r\0\x0B"), '.'));
+}
+
 function fn_yandex_image_finder_resolve_host($host)
 {
+    $host = fn_yandex_image_finder_normalize_host($host);
     if (filter_var($host, FILTER_VALIDATE_IP)) {
         return [$host];
     }

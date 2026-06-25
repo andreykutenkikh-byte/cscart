@@ -3,7 +3,7 @@
     <id>yandex_image_finder</id>
     <name>Yandex Image Finder</name>
     <description>Admin-only product image search and manual import through Yandex Search API.</description>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <priority>20000</priority>
     <position>0</position>
     <status>disabled</status>
@@ -29,8 +29,12 @@
                         <type>selectbox</type>
                         <default_value>api_key</default_value>
                         <variants>
-                            <item id="api_key">API key</item>
-                            <item id="iam_token">IAM token</item>
+                            <item id="api_key">
+                                <name>API key</name>
+                            </item>
+                            <item id="iam_token">
+                                <name>IAM token</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="api_key">
@@ -38,14 +42,14 @@
                         <translations>
                             <item lang="ru" for="name">API-ключ Yandex</item>
                         </translations>
-                        <type>input</type>
+                        <type>password</type>
                     </item>
                     <item id="iam_token">
                         <name>Yandex IAM token</name>
                         <translations>
                             <item lang="ru" for="name">IAM-токен Yandex</item>
                         </translations>
-                        <type>input</type>
+                        <type>password</type>
                     </item>
                     <item id="folder_id">
                         <name>Yandex Folder ID</name>
@@ -62,12 +66,24 @@
                         <type>selectbox</type>
                         <default_value>SEARCH_TYPE_RU</default_value>
                         <variants>
-                            <item id="SEARCH_TYPE_RU">RU</item>
-                            <item id="SEARCH_TYPE_COM">COM</item>
-                            <item id="SEARCH_TYPE_TR">TR</item>
-                            <item id="SEARCH_TYPE_KK">KK</item>
-                            <item id="SEARCH_TYPE_BE">BE</item>
-                            <item id="SEARCH_TYPE_UZ">UZ</item>
+                            <item id="SEARCH_TYPE_RU">
+                                <name>RU</name>
+                            </item>
+                            <item id="SEARCH_TYPE_COM">
+                                <name>COM</name>
+                            </item>
+                            <item id="SEARCH_TYPE_TR">
+                                <name>TR</name>
+                            </item>
+                            <item id="SEARCH_TYPE_KK">
+                                <name>KK</name>
+                            </item>
+                            <item id="SEARCH_TYPE_BE">
+                                <name>BE</name>
+                            </item>
+                            <item id="SEARCH_TYPE_UZ">
+                                <name>UZ</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="family_filter">
@@ -78,8 +94,12 @@
                         <type>selectbox</type>
                         <default_value>FAMILY_MODE_STRICT</default_value>
                         <variants>
-                            <item id="FAMILY_MODE_STRICT">STRICT</item>
-                            <item id="FAMILY_MODE_MODERATE">MODERATE</item>
+                            <item id="FAMILY_MODE_STRICT">
+                                <name>STRICT</name>
+                            </item>
+                            <item id="FAMILY_MODE_MODERATE">
+                                <name>MODERATE</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="docs_on_page">
@@ -98,11 +118,21 @@
                         <type>selectbox</type>
                         <default_value>IMAGE_SIZE_LARGE</default_value>
                         <variants>
-                            <item id="any">Any</item>
-                            <item id="IMAGE_SIZE_ENORMOUS">ENORMOUS</item>
-                            <item id="IMAGE_SIZE_LARGE">LARGE</item>
-                            <item id="IMAGE_SIZE_MEDIUM">MEDIUM</item>
-                            <item id="IMAGE_SIZE_SMALL">SMALL</item>
+                            <item id="any">
+                                <name>Any</name>
+                            </item>
+                            <item id="IMAGE_SIZE_ENORMOUS">
+                                <name>ENORMOUS</name>
+                            </item>
+                            <item id="IMAGE_SIZE_LARGE">
+                                <name>LARGE</name>
+                            </item>
+                            <item id="IMAGE_SIZE_MEDIUM">
+                                <name>MEDIUM</name>
+                            </item>
+                            <item id="IMAGE_SIZE_SMALL">
+                                <name>SMALL</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="image_format_filter">
@@ -113,9 +143,15 @@
                         <type>selectbox</type>
                         <default_value>jpeg_png</default_value>
                         <variants>
-                            <item id="jpeg_png">JPEG/PNG</item>
-                            <item id="IMAGE_FORMAT_JPEG">JPEG</item>
-                            <item id="IMAGE_FORMAT_PNG">PNG</item>
+                            <item id="jpeg_png">
+                                <name>JPEG/PNG</name>
+                            </item>
+                            <item id="IMAGE_FORMAT_JPEG">
+                                <name>JPEG</name>
+                            </item>
+                            <item id="IMAGE_FORMAT_PNG">
+                                <name>PNG</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="max_import_file_size_mb">
@@ -207,6 +243,20 @@
         <item lang="en" id="yif_settings_not_ready">Yandex credentials or Folder ID are not configured.</item>
         <item lang="en" id="yif_original_url">Original image URL</item>
         <item lang="en" id="yif_source_page_url">Source page URL</item>
+        <item lang="en" id="yif_test_connection">Test Yandex connection</item>
+        <item lang="en" id="yif_test_connection_success">Connection successful: Yandex Search API responded, rawData received, candidates found: [count].</item>
+        <item lang="en" id="yif_missing_yandex_credentials">Yandex credentials are not configured.</item>
+        <item lang="en" id="yif_missing_yandex_folder_id">Yandex Folder ID is not configured.</item>
+        <item lang="en" id="yif_yandex_http_401">Yandex Search API returned HTTP 401: invalid API key or IAM token.</item>
+        <item lang="en" id="yif_yandex_http_403">Yandex Search API returned HTTP 403: missing role, likely search-api.webSearch.user.</item>
+        <item lang="en" id="yif_yandex_http_400">Yandex Search API returned HTTP 400: invalid request or Folder ID.</item>
+        <item lang="en" id="yif_yandex_http_429">Yandex Search API returned HTTP 429: quota or rate limit exceeded.</item>
+        <item lang="en" id="yif_yandex_http_error">Yandex Search API returned HTTP status [status].</item>
+        <item lang="en" id="yif_yandex_http_unknown">Yandex Search API did not return a valid HTTP response.</item>
+        <item lang="en" id="yif_yandex_invalid_json">Yandex Search API returned invalid JSON.</item>
+        <item lang="en" id="yif_yandex_missing_raw_data">Yandex Search API response does not contain rawData.</item>
+        <item lang="en" id="yif_yandex_raw_data_base64_error">Yandex rawData is not valid Base64.</item>
+        <item lang="en" id="yif_yandex_xml_parse_error">Yandex rawData XML parse error.</item>
 
         <item lang="ru" id="yandex_image_finder">Yandex Image Finder</item>
         <item lang="ru" id="yif_search_images_via_yandex">Поиск изображений через Яндекс</item>
@@ -230,6 +280,20 @@
         <item lang="ru" id="yif_settings_not_ready">Не настроены учетные данные Yandex или Folder ID.</item>
         <item lang="ru" id="yif_original_url">URL оригинального изображения</item>
         <item lang="ru" id="yif_source_page_url">URL страницы-источника</item>
+        <item lang="ru" id="yif_test_connection">Проверить подключение к Яндексу</item>
+        <item lang="ru" id="yif_test_connection_success">Подключение успешно: Yandex Search API ответил, rawData получен, найдено кандидатов: [count].</item>
+        <item lang="ru" id="yif_missing_yandex_credentials">Не настроены учетные данные Yandex.</item>
+        <item lang="ru" id="yif_missing_yandex_folder_id">Не настроен Folder ID Yandex.</item>
+        <item lang="ru" id="yif_yandex_http_401">Yandex Search API вернул HTTP 401: неверный API-ключ или IAM-токен.</item>
+        <item lang="ru" id="yif_yandex_http_403">Yandex Search API вернул HTTP 403: нет роли, вероятно search-api.webSearch.user.</item>
+        <item lang="ru" id="yif_yandex_http_400">Yandex Search API вернул HTTP 400: неверный запрос или Folder ID.</item>
+        <item lang="ru" id="yif_yandex_http_429">Yandex Search API вернул HTTP 429: превышена квота или лимит запросов.</item>
+        <item lang="ru" id="yif_yandex_http_error">Yandex Search API вернул HTTP [status].</item>
+        <item lang="ru" id="yif_yandex_http_unknown">Yandex Search API не вернул корректный HTTP-ответ.</item>
+        <item lang="ru" id="yif_yandex_invalid_json">Yandex Search API вернул некорректный JSON.</item>
+        <item lang="ru" id="yif_yandex_missing_raw_data">Ответ Yandex Search API не содержит rawData.</item>
+        <item lang="ru" id="yif_yandex_raw_data_base64_error">Yandex rawData не является корректным Base64.</item>
+        <item lang="ru" id="yif_yandex_xml_parse_error">Ошибка разбора XML из Yandex rawData.</item>
     </language_variables>
     <queries>
         <item for="install">
