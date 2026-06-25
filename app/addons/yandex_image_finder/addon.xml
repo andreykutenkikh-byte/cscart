@@ -3,7 +3,7 @@
     <id>yandex_image_finder</id>
     <name>Yandex Image Finder</name>
     <description>Admin-only product image search and manual import through Yandex Search API.</description>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <priority>20000</priority>
     <position>0</position>
     <status>disabled</status>
@@ -29,8 +29,12 @@
                         <type>selectbox</type>
                         <default_value>api_key</default_value>
                         <variants>
-                            <item id="api_key">API key</item>
-                            <item id="iam_token">IAM token</item>
+                            <item id="api_key">
+                                <name>API key</name>
+                            </item>
+                            <item id="iam_token">
+                                <name>IAM token</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="api_key">
@@ -62,12 +66,24 @@
                         <type>selectbox</type>
                         <default_value>SEARCH_TYPE_RU</default_value>
                         <variants>
-                            <item id="SEARCH_TYPE_RU">RU</item>
-                            <item id="SEARCH_TYPE_COM">COM</item>
-                            <item id="SEARCH_TYPE_TR">TR</item>
-                            <item id="SEARCH_TYPE_KK">KK</item>
-                            <item id="SEARCH_TYPE_BE">BE</item>
-                            <item id="SEARCH_TYPE_UZ">UZ</item>
+                            <item id="SEARCH_TYPE_RU">
+                                <name>RU</name>
+                            </item>
+                            <item id="SEARCH_TYPE_COM">
+                                <name>COM</name>
+                            </item>
+                            <item id="SEARCH_TYPE_TR">
+                                <name>TR</name>
+                            </item>
+                            <item id="SEARCH_TYPE_KK">
+                                <name>KK</name>
+                            </item>
+                            <item id="SEARCH_TYPE_BE">
+                                <name>BE</name>
+                            </item>
+                            <item id="SEARCH_TYPE_UZ">
+                                <name>UZ</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="family_filter">
@@ -78,8 +94,12 @@
                         <type>selectbox</type>
                         <default_value>FAMILY_MODE_STRICT</default_value>
                         <variants>
-                            <item id="FAMILY_MODE_STRICT">STRICT</item>
-                            <item id="FAMILY_MODE_MODERATE">MODERATE</item>
+                            <item id="FAMILY_MODE_STRICT">
+                                <name>STRICT</name>
+                            </item>
+                            <item id="FAMILY_MODE_MODERATE">
+                                <name>MODERATE</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="docs_on_page">
@@ -98,11 +118,21 @@
                         <type>selectbox</type>
                         <default_value>IMAGE_SIZE_LARGE</default_value>
                         <variants>
-                            <item id="any">Any</item>
-                            <item id="IMAGE_SIZE_ENORMOUS">ENORMOUS</item>
-                            <item id="IMAGE_SIZE_LARGE">LARGE</item>
-                            <item id="IMAGE_SIZE_MEDIUM">MEDIUM</item>
-                            <item id="IMAGE_SIZE_SMALL">SMALL</item>
+                            <item id="any">
+                                <name>Any</name>
+                            </item>
+                            <item id="IMAGE_SIZE_ENORMOUS">
+                                <name>ENORMOUS</name>
+                            </item>
+                            <item id="IMAGE_SIZE_LARGE">
+                                <name>LARGE</name>
+                            </item>
+                            <item id="IMAGE_SIZE_MEDIUM">
+                                <name>MEDIUM</name>
+                            </item>
+                            <item id="IMAGE_SIZE_SMALL">
+                                <name>SMALL</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="image_format_filter">
@@ -113,9 +143,15 @@
                         <type>selectbox</type>
                         <default_value>jpeg_png</default_value>
                         <variants>
-                            <item id="jpeg_png">JPEG/PNG</item>
-                            <item id="IMAGE_FORMAT_JPEG">JPEG</item>
-                            <item id="IMAGE_FORMAT_PNG">PNG</item>
+                            <item id="jpeg_png">
+                                <name>JPEG/PNG</name>
+                            </item>
+                            <item id="IMAGE_FORMAT_JPEG">
+                                <name>JPEG</name>
+                            </item>
+                            <item id="IMAGE_FORMAT_PNG">
+                                <name>PNG</name>
+                            </item>
                         </variants>
                     </item>
                     <item id="max_import_file_size_mb">
