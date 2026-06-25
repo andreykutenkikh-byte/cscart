@@ -44,6 +44,15 @@
 - **Отклонить** updates the candidate status in place.
 - Settings page button **Проверить подключение к Яндексу** returns the expected success/error notification.
 
+## Validation
+
+- `php -l` for all add-on PHP files.
+- `php app/addons/yandex_image_finder/tests/isolated_checks.php`
+- `addon.xml` parse check through `simplexml_load_file`.
+- `git diff --check`
+- Confirmed no CS-Cart core files changed.
+- No deployment performed.
+
 ## Security notes
 
 - All add-on AJAX POST forms include CS-Cart `security_hash`.
