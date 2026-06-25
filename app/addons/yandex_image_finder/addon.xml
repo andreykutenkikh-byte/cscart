@@ -1,0 +1,283 @@
+<?xml version="1.0"?>
+<addon scheme="3.0">
+    <id>yandex_image_finder</id>
+    <name>Yandex Image Finder</name>
+    <description>Admin-only product image search and manual import through Yandex Search API.</description>
+    <version>1.0.0</version>
+    <priority>20000</priority>
+    <position>0</position>
+    <status>disabled</status>
+    <default_language>ru</default_language>
+    <auto_install>ULTIMATE,MULTIVENDOR</auto_install>
+    <translations>
+        <item lang="ru" for="name">Yandex Image Finder</item>
+        <item lang="ru" for="description">Административный поиск и ручная загрузка изображений товаров через Yandex Search API.</item>
+    </translations>
+    <settings edition_type="ROOT,ULT:VENDOR">
+        <sections>
+            <section id="general">
+                <name>General</name>
+                <translations>
+                    <item lang="ru" for="name">Основные настройки</item>
+                </translations>
+                <items>
+                    <item id="auth_mode">
+                        <name>Yandex authentication mode</name>
+                        <translations>
+                            <item lang="ru" for="name">Способ авторизации Yandex</item>
+                        </translations>
+                        <type>selectbox</type>
+                        <default_value>api_key</default_value>
+                        <variants>
+                            <item id="api_key">API key</item>
+                            <item id="iam_token">IAM token</item>
+                        </variants>
+                    </item>
+                    <item id="api_key">
+                        <name>Yandex API key</name>
+                        <translations>
+                            <item lang="ru" for="name">API-ключ Yandex</item>
+                        </translations>
+                        <type>input</type>
+                    </item>
+                    <item id="iam_token">
+                        <name>Yandex IAM token</name>
+                        <translations>
+                            <item lang="ru" for="name">IAM-токен Yandex</item>
+                        </translations>
+                        <type>input</type>
+                    </item>
+                    <item id="folder_id">
+                        <name>Yandex Folder ID</name>
+                        <translations>
+                            <item lang="ru" for="name">Folder ID Yandex</item>
+                        </translations>
+                        <type>input</type>
+                    </item>
+                    <item id="search_type">
+                        <name>Search type</name>
+                        <translations>
+                            <item lang="ru" for="name">Тип поиска</item>
+                        </translations>
+                        <type>selectbox</type>
+                        <default_value>SEARCH_TYPE_RU</default_value>
+                        <variants>
+                            <item id="SEARCH_TYPE_RU">RU</item>
+                            <item id="SEARCH_TYPE_COM">COM</item>
+                            <item id="SEARCH_TYPE_TR">TR</item>
+                            <item id="SEARCH_TYPE_KK">KK</item>
+                            <item id="SEARCH_TYPE_BE">BE</item>
+                            <item id="SEARCH_TYPE_UZ">UZ</item>
+                        </variants>
+                    </item>
+                    <item id="family_filter">
+                        <name>Family filter</name>
+                        <translations>
+                            <item lang="ru" for="name">Семейный фильтр</item>
+                        </translations>
+                        <type>selectbox</type>
+                        <default_value>FAMILY_MODE_STRICT</default_value>
+                        <variants>
+                            <item id="FAMILY_MODE_STRICT">STRICT</item>
+                            <item id="FAMILY_MODE_MODERATE">MODERATE</item>
+                        </variants>
+                    </item>
+                    <item id="docs_on_page">
+                        <name>Docs per page</name>
+                        <translations>
+                            <item lang="ru" for="name">Документов на страницу</item>
+                        </translations>
+                        <type>input</type>
+                        <default_value>20</default_value>
+                    </item>
+                    <item id="image_size_filter">
+                        <name>Image size filter</name>
+                        <translations>
+                            <item lang="ru" for="name">Фильтр размера изображения</item>
+                        </translations>
+                        <type>selectbox</type>
+                        <default_value>IMAGE_SIZE_LARGE</default_value>
+                        <variants>
+                            <item id="any">Any</item>
+                            <item id="IMAGE_SIZE_ENORMOUS">ENORMOUS</item>
+                            <item id="IMAGE_SIZE_LARGE">LARGE</item>
+                            <item id="IMAGE_SIZE_MEDIUM">MEDIUM</item>
+                            <item id="IMAGE_SIZE_SMALL">SMALL</item>
+                        </variants>
+                    </item>
+                    <item id="image_format_filter">
+                        <name>Image format filter</name>
+                        <translations>
+                            <item lang="ru" for="name">Фильтр формата изображения</item>
+                        </translations>
+                        <type>selectbox</type>
+                        <default_value>jpeg_png</default_value>
+                        <variants>
+                            <item id="jpeg_png">JPEG/PNG</item>
+                            <item id="IMAGE_FORMAT_JPEG">JPEG</item>
+                            <item id="IMAGE_FORMAT_PNG">PNG</item>
+                        </variants>
+                    </item>
+                    <item id="max_import_file_size_mb">
+                        <name>Max import file size MB</name>
+                        <translations>
+                            <item lang="ru" for="name">Максимальный размер файла, МБ</item>
+                        </translations>
+                        <type>input</type>
+                        <default_value>8</default_value>
+                    </item>
+                    <item id="min_image_width">
+                        <name>Minimum image width</name>
+                        <translations>
+                            <item lang="ru" for="name">Минимальная ширина изображения</item>
+                        </translations>
+                        <type>input</type>
+                        <default_value>300</default_value>
+                    </item>
+                    <item id="min_image_height">
+                        <name>Minimum image height</name>
+                        <translations>
+                            <item lang="ru" for="name">Минимальная высота изображения</item>
+                        </translations>
+                        <type>input</type>
+                        <default_value>300</default_value>
+                    </item>
+                    <item id="request_timeout">
+                        <name>Request timeout seconds</name>
+                        <translations>
+                            <item lang="ru" for="name">Таймаут запросов, секунд</item>
+                        </translations>
+                        <type>input</type>
+                        <default_value>10</default_value>
+                    </item>
+                    <item id="allowed_domains">
+                        <name>Allowed domains list</name>
+                        <translations>
+                            <item lang="ru" for="name">Разрешенные домены</item>
+                        </translations>
+                        <type>textarea</type>
+                    </item>
+                    <item id="blocked_domains">
+                        <name>Blocked domains list</name>
+                        <translations>
+                            <item lang="ru" for="name">Заблокированные домены</item>
+                        </translations>
+                        <type>textarea</type>
+                    </item>
+                    <item id="enable_set_main">
+                        <name>Allow Set as main image</name>
+                        <translations>
+                            <item lang="ru" for="name">Разрешить кнопку «Сделать главной»</item>
+                        </translations>
+                        <type>checkbox</type>
+                        <default_value>Y</default_value>
+                    </item>
+                    <item id="show_rights_warning">
+                        <name>Show image rights warning before import</name>
+                        <translations>
+                            <item lang="ru" for="name">Показывать предупреждение о правах перед импортом</item>
+                        </translations>
+                        <type>checkbox</type>
+                        <default_value>Y</default_value>
+                    </item>
+                </items>
+            </section>
+        </sections>
+    </settings>
+    <language_variables>
+        <item lang="en" id="yandex_image_finder">Yandex Image Finder</item>
+        <item lang="en" id="yif_search_images_via_yandex">Search images via Yandex</item>
+        <item lang="en" id="yif_query">Query</item>
+        <item lang="en" id="yif_find_images">Find images</item>
+        <item lang="en" id="yif_open_source">Open source page</item>
+        <item lang="en" id="yif_upload_additional">Upload as additional image</item>
+        <item lang="en" id="yif_set_main">Set as main image</item>
+        <item lang="en" id="yif_reject">Reject</item>
+        <item lang="en" id="yif_already_imported">Already imported</item>
+        <item lang="en" id="yif_import_error">Import error</item>
+        <item lang="en" id="yif_rights_warning">Check image rights before importing this file.</item>
+        <item lang="en" id="yif_no_candidates">No candidates yet.</item>
+        <item lang="en" id="yif_settings_summary">Settings</item>
+        <item lang="en" id="yif_source_domain">Source domain</item>
+        <item lang="en" id="yif_candidate_rejected">Candidate rejected.</item>
+        <item lang="en" id="yif_candidate_imported">Image imported.</item>
+        <item lang="en" id="yif_search_completed">Search completed.</item>
+        <item lang="en" id="yif_confirm_set_main">Replace the current main image?</item>
+        <item lang="en" id="yif_confirm_import">Import this image into the product gallery?</item>
+        <item lang="en" id="yif_settings_not_ready">Yandex credentials or Folder ID are not configured.</item>
+        <item lang="en" id="yif_original_url">Original image URL</item>
+        <item lang="en" id="yif_source_page_url">Source page URL</item>
+
+        <item lang="ru" id="yandex_image_finder">Yandex Image Finder</item>
+        <item lang="ru" id="yif_search_images_via_yandex">Поиск изображений через Яндекс</item>
+        <item lang="ru" id="yif_query">Запрос</item>
+        <item lang="ru" id="yif_find_images">Найти изображения</item>
+        <item lang="ru" id="yif_open_source">Открыть источник</item>
+        <item lang="ru" id="yif_upload_additional">Загрузить как дополнительную</item>
+        <item lang="ru" id="yif_set_main">Сделать главной</item>
+        <item lang="ru" id="yif_reject">Отклонить</item>
+        <item lang="ru" id="yif_already_imported">Уже загружено</item>
+        <item lang="ru" id="yif_import_error">Ошибка загрузки</item>
+        <item lang="ru" id="yif_rights_warning">Перед импортом проверьте права на использование изображения.</item>
+        <item lang="ru" id="yif_no_candidates">Кандидатов пока нет.</item>
+        <item lang="ru" id="yif_settings_summary">Настройки</item>
+        <item lang="ru" id="yif_source_domain">Домен источника</item>
+        <item lang="ru" id="yif_candidate_rejected">Кандидат отклонен.</item>
+        <item lang="ru" id="yif_candidate_imported">Изображение импортировано.</item>
+        <item lang="ru" id="yif_search_completed">Поиск завершен.</item>
+        <item lang="ru" id="yif_confirm_set_main">Заменить текущее главное изображение?</item>
+        <item lang="ru" id="yif_confirm_import">Импортировать это изображение в галерею товара?</item>
+        <item lang="ru" id="yif_settings_not_ready">Не настроены учетные данные Yandex или Folder ID.</item>
+        <item lang="ru" id="yif_original_url">URL оригинального изображения</item>
+        <item lang="ru" id="yif_source_page_url">URL страницы-источника</item>
+    </language_variables>
+    <queries>
+        <item for="install">
+            CREATE TABLE IF NOT EXISTS `?:yandex_image_finder_sessions` (
+                `session_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                `product_id` int(11) unsigned NOT NULL DEFAULT '0',
+                `admin_user_id` int(11) unsigned NOT NULL DEFAULT '0',
+                `query` varchar(400) NOT NULL DEFAULT '',
+                `search_type` varchar(32) NOT NULL DEFAULT '',
+                `page` int(11) unsigned NOT NULL DEFAULT '0',
+                `docs_on_page` int(11) unsigned NOT NULL DEFAULT '20',
+                `status` varchar(16) NOT NULL DEFAULT 'new',
+                `raw_response_hash` varchar(64) NOT NULL DEFAULT '',
+                `error_message` text,
+                `created_at` int(11) unsigned NOT NULL DEFAULT '0',
+                `updated_at` int(11) unsigned NOT NULL DEFAULT '0',
+                PRIMARY KEY (`session_id`),
+                KEY `product_id` (`product_id`),
+                KEY `admin_user_id` (`admin_user_id`)
+            ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+        </item>
+        <item for="install">
+            CREATE TABLE IF NOT EXISTS `?:yandex_image_finder_candidates` (
+                `candidate_id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+                `session_id` int(11) unsigned NOT NULL DEFAULT '0',
+                `product_id` int(11) unsigned NOT NULL DEFAULT '0',
+                `image_url` text NOT NULL,
+                `thumbnail_url` text,
+                `source_page_url` text,
+                `source_domain` varchar(255) NOT NULL DEFAULT '',
+                `width` int(11) unsigned NOT NULL DEFAULT '0',
+                `height` int(11) unsigned NOT NULL DEFAULT '0',
+                `file_size` int(11) unsigned NOT NULL DEFAULT '0',
+                `mime_type` varchar(100) NOT NULL DEFAULT '',
+                `status` varchar(16) NOT NULL DEFAULT 'new',
+                `imported_pair_id` int(11) unsigned DEFAULT NULL,
+                `imported_as` varchar(16) DEFAULT NULL,
+                `checksum` varchar(64) DEFAULT NULL,
+                `error_message` text,
+                `created_at` int(11) unsigned NOT NULL DEFAULT '0',
+                `updated_at` int(11) unsigned NOT NULL DEFAULT '0',
+                PRIMARY KEY (`candidate_id`),
+                KEY `session_id` (`session_id`),
+                KEY `product_id` (`product_id`),
+                KEY `status` (`status`)
+            ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+        </item>
+        <item for="uninstall">DROP TABLE IF EXISTS `?:yandex_image_finder_candidates`;</item>
+        <item for="uninstall">DROP TABLE IF EXISTS `?:yandex_image_finder_sessions`;</item>
+    </queries>
+</addon>
