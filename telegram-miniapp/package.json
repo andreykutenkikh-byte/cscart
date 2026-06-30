@@ -9,7 +9,7 @@
     "start": "node server/index.js",
     "db:migrate": "node server/migrate.js",
     "import:dvkeramik": "node server/import-cli.js",
-    "check": "node --check server/db.js && node --check server/catalog.js && node --check server/importer.js && node --check server/orders.js && node --check server/telegram.js && node --check server/index.js && vite build"
+    "check": "node --check server/db.js && node --check server/catalog.js && node --check server/importer.js && node --check server/orders.js && node --check server/telegram.js && node --check server/admin.js && node --check server/visits.js && node --check server/index.js && vite build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
