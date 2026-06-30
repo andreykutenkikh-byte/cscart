@@ -1,0 +1,20 @@
+FROM node:24-alpine AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml* ./
+RUN corepack enable && pnpm install --frozen-lockfile
+
+FROM deps AS build
+WORKDIR /app
+COPY . .
+RUN corepack enable && pnpm build
+
+FROM node:24-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY package.json ./
+COPY server ./server
+COPY migrations ./migrations
+EXPOSE 3001
+CMD ["node", "server/index.js"]

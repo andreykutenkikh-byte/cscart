@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dvkeramik_miniapp
+      POSTGRES_USER: dvkeramik
+      POSTGRES_PASSWORD: dvkeramik
+    ports:
+      - "5432:5432"
+    volumes:
+      - dvkeramik_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dvkeramik -d dvkeramik_miniapp"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://dvkeramik:dvkeramik@db:5432/dvkeramik_miniapp
+      DVKERAMIK_YML_URL: https://dvkeramik.ru/yml_get/26
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  import-cron:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://dvkeramik:dvkeramik@db:5432/dvkeramik_miniapp
+      DVKERAMIK_YML_URL: https://dvkeramik.ru/yml_get/26
+    command: >
+      sh -c "node server/migrate.js &&
+             while true;
+             do node server/import-cli.js;
+             sleep $${IMPORT_INTERVAL_SECONDS:-86400};
+             done"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dvkeramik_pgdata:
