@@ -455,6 +455,73 @@ button {
   color: #667a74;
 }
 
+.admin-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #dfe8e5;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-entry div,
+.admin-card,
+.admin-details div {
+  min-width: 0;
+}
+
+.admin-entry strong,
+.admin-entry span,
+.admin-card strong,
+.admin-card span,
+.admin-details b {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-entry span,
+.admin-card span,
+.admin-details span {
+  color: #667a74;
+  font-size: 13px;
+}
+
+.admin-grid,
+.admin-list,
+.admin-details {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-card {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #dfe8e5;
+  border-radius: 8px;
+  background: #fff;
+  color: #18221f;
+  text-align: left;
+}
+
+.admin-card.static {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-details {
+  margin-bottom: 12px;
+}
+
+.admin-details div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e4ece9;
+}
+
 .bottom-nav {
   position: fixed;
   right: 0;

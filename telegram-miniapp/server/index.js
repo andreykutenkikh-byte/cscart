@@ -6,6 +6,8 @@ import { pool, query } from './db.js';
 import { getCategories, getFacets, getProductDetail, getProducts } from './catalog.js';
 import { createOrder, getOrders } from './orders.js';
 import { importDvKeramikFeed } from './importer.js';
+import { getAdminOrders, getAdminSettings, getAdminVisitors, getMe, requireAdmin, runAdminImportNow } from './admin.js';
+import { recordVisit } from './visits.js';
 
 dotenv.config();
 
@@ -33,6 +35,14 @@ app.get('/api/health', asyncRoute(async (req, res) => {
     database: db.rows[0]?.ok === 1 ? 'ok' : 'unknown',
     import: latestImport.rows[0] || null
   });
+}));
+
+app.get('/api/me', asyncRoute(async (req, res) => {
+  res.json(getMe(req));
+}));
+
+app.post('/api/visits', asyncRoute(async (req, res) => {
+  res.json({ visit: await recordVisit(req) });
 }));
 
 app.get('/api/catalog/categories', asyncRoute(async (req, res) => {
@@ -79,6 +89,31 @@ app.post('/api/orders', asyncRoute(async (req, res) => {
 
 app.get('/api/orders', asyncRoute(async (req, res) => {
   res.json({ orders: await getOrders(req) });
+}));
+
+app.get('/api/admin/me', asyncRoute(async (req, res) => {
+  const identity = requireAdmin(req);
+  res.json({ ...getMe(req), admin: { username: identity.username, telegramUserId: identity.telegramUserId } });
+}));
+
+app.get('/api/admin/settings', asyncRoute(async (req, res) => {
+  requireAdmin(req);
+  res.json({ settings: await getAdminSettings() });
+}));
+
+app.get('/api/admin/visitors', asyncRoute(async (req, res) => {
+  requireAdmin(req);
+  res.json(await getAdminVisitors(req.query));
+}));
+
+app.get('/api/admin/orders', asyncRoute(async (req, res) => {
+  requireAdmin(req);
+  res.json(await getAdminOrders(req.query));
+}));
+
+app.post('/api/admin/import/run', asyncRoute(async (req, res) => {
+  requireAdmin(req);
+  res.json({ import: await runAdminImportNow() });
 }));
 
 app.post('/api/admin/import/dvkeramik', asyncRoute(async (req, res) => {

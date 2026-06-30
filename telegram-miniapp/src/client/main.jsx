@@ -20,6 +20,20 @@ function flattenCategories(categories, depth = 0) {
   ]);
 }
 
+function initialViewFromPath() {
+  const path = window.location.pathname;
+  if (path === '/admin/settings') return 'adminSettings';
+  if (path === '/admin/visitors') return 'adminVisitors';
+  if (path === '/admin/orders') return 'adminOrders';
+  if (path === '/admin') return 'admin';
+  return 'home';
+}
+
+function formatDateTime(value) {
+  if (!value) return 'not available';
+  return new Date(value).toLocaleString('ru-RU');
+}
+
 function ProductImage({ src, alt }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return <div className="image-fallback">DV</div>;
@@ -285,7 +299,19 @@ function CheckoutScreen({ cart, platform, setCart, setView }) {
   );
 }
 
-function OrdersScreen({ platform }) {
+function AdminEntry({ setView }) {
+  return (
+    <section className="admin-entry">
+      <div>
+        <strong>Admin Panel</strong>
+        <span>Settings, Visitors, Orders, Import status</span>
+      </div>
+      <button className="secondary" onClick={() => setView('admin')}>Open</button>
+    </section>
+  );
+}
+
+function OrdersScreen({ platform, me, setView }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -294,6 +320,7 @@ function OrdersScreen({ platform }) {
 
   return (
     <main className="screen">
+      {me?.isAdmin ? <AdminEntry setView={setView} /> : null}
       <h1 className="page-title">Заявки</h1>
       {loading ? <div className="empty">Загружаем...</div> : null}
       {!loading && !orders.length ? <div className="empty">Здесь появятся ваши последние заявки</div> : null}
@@ -311,8 +338,158 @@ function OrdersScreen({ platform }) {
   );
 }
 
+function AdminGuard({ me, setView, children }) {
+  if (!me) {
+    return <main className="screen"><div className="empty">Checking access...</div></main>;
+  }
+  if (!me.isAdmin) {
+    return (
+      <main className="screen">
+        <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Back</button>
+        <h1 className="page-title">Admin Panel</h1>
+        <div className="empty">Admin access is not available for this user.</div>
+      </main>
+    );
+  }
+  return children;
+}
+
+function AdminMenu({ setView }) {
+  const items = [
+    ['adminSettings', 'Settings', 'Feed, public URL, import status'],
+    ['adminVisitors', 'Visitors', 'Recent Mini App visitors'],
+    ['adminOrders', 'Orders', 'All submitted requests']
+  ];
+  return (
+    <main className="screen">
+      <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Orders</button>
+      <h1 className="page-title">Admin Panel</h1>
+      <div className="admin-grid">
+        {items.map(([view, title, description]) => (
+          <button key={view} className="admin-card" onClick={() => setView(view)}>
+            <strong>{title}</strong>
+            <span>{description}</span>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function AdminSettingsScreen({ platform, setView }) {
+  const [settings, setSettings] = useState(null);
+  const [status, setStatus] = useState('');
+
+  const load = () => {
+    setStatus('');
+    apiGet('/api/admin/settings', {}, platform)
+      .then((data) => setSettings(data.settings))
+      .catch((error) => setStatus(error.message));
+  };
+
+  useEffect(load, []);
+
+  const runImport = async () => {
+    setStatus('Running import...');
+    try {
+      const data = await apiPost('/api/admin/import/run', {}, platform);
+      setStatus(`Import completed: ${data.import.categoriesTotal} categories, ${data.import.offersTotal} products.`);
+      load();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  };
+
+  return (
+    <main className="screen">
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
+      <h1 className="page-title">Settings</h1>
+      {!settings ? <div className="empty">Loading settings...</div> : (
+        <section className="admin-details">
+          <div><span>Feed URL</span><b>{settings.feedUrl}</b></div>
+          <div><span>Mini App URL</span><b>{settings.miniappPublicUrl || 'not configured'}</b></div>
+          <div><span>Telegram notifications</span><b>{settings.telegramNotificationsConfigured ? 'configured' : 'not configured'}</b></div>
+          <div><span>Last import status</span><b>{settings.latestImport?.status || 'not available'}</b></div>
+          <div><span>Last import time</span><b>{formatDateTime(settings.latestImport?.finished_at || settings.latestImport?.finishedAt)}</b></div>
+          <div><span>Imported categories</span><b>{settings.latestImport?.categories_total ?? settings.counts?.active_categories ?? 0}</b></div>
+          <div><span>Imported products</span><b>{settings.latestImport?.offers_total ?? settings.counts?.active_products ?? 0}</b></div>
+          <div><span>Hidden products</span><b>{settings.latestImport?.products_hidden ?? settings.counts?.hidden_products ?? 0}</b></div>
+          <div><span>Visitors</span><b>{settings.counts?.visitors_total ?? 0}</b></div>
+          <div><span>Orders</span><b>{settings.counts?.orders_total ?? 0}</b></div>
+        </section>
+      )}
+      <button className="primary full" onClick={runImport}>Run import now</button>
+      {status ? <div className="status-line">{status}</div> : null}
+    </main>
+  );
+}
+
+function AdminVisitorsScreen({ platform, setView }) {
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    apiGet('/api/admin/visitors', { limit: 50 }, platform)
+      .then(setData)
+      .catch((error) => setStatus(error.message));
+  }, []);
+
+  return (
+    <main className="screen">
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
+      <h1 className="page-title">Visitors</h1>
+      {status ? <div className="status-line">{status}</div> : null}
+      {!data ? <div className="empty">Loading visitors...</div> : null}
+      {data && !data.visitors.length ? <div className="empty">No visitors yet.</div> : null}
+      <div className="admin-list">
+        {(data?.visitors || []).map((visitor) => (
+          <article className="admin-card static" key={visitor.id}>
+            <strong>{visitor.username ? `@${visitor.username}` : visitor.firstName || visitor.telegramUserId || 'Anonymous visitor'}</strong>
+            <span>ID: {visitor.telegramUserId || 'anonymous'} · {visitor.source}</span>
+            <span>Visits: {visitor.visitsCount} · Orders: {visitor.ordersCount}</span>
+            <span>First seen: {formatDateTime(visitor.firstSeenAt)}</span>
+            <span>Last seen: {formatDateTime(visitor.lastSeenAt)}</span>
+          </article>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function AdminOrdersScreen({ platform, setView }) {
+  const [data, setData] = useState(null);
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    apiGet('/api/admin/orders', { limit: 50 }, platform)
+      .then(setData)
+      .catch((error) => setStatus(error.message));
+  }, []);
+
+  return (
+    <main className="screen">
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
+      <h1 className="page-title">Orders</h1>
+      {status ? <div className="status-line">{status}</div> : null}
+      {!data ? <div className="empty">Loading orders...</div> : null}
+      {data && !data.orders.length ? <div className="empty">No orders yet.</div> : null}
+      <div className="admin-list">
+        {(data?.orders || []).map((order) => (
+          <article className="order-card" key={order.id}>
+            <strong>Order #{order.id.slice(0, 8)}</strong>
+            <span>{formatDateTime(order.createdAt)} · {order.status}</span>
+            <span>{order.customerName} · {order.phone}</span>
+            <span>Telegram: {order.username ? `@${order.username}` : order.telegramUserId || 'not provided'}</span>
+            <span>Total: {formatPrice(order.totalPrice, 'RUB')}</span>
+            {order.comment ? <p>{order.comment}</p> : null}
+            <p>{order.items.map((item) => `${item.productName} / ${item.sku} x${item.quantity}`).join(', ')}</p>
+          </article>
+        ))}
+      </div>
+    </main>
+  );
+}
+
 function App() {
-  const [view, setView] = useState('home');
+  const [view, setView] = useState(initialViewFromPath());
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
   const [facets, setFacets] = useState(null);
@@ -323,12 +500,15 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState(loadCart());
+  const [me, setMe] = useState(null);
 
   const categoriesFlat = useMemo(() => flattenCategories(categories), [categories]);
 
   useEffect(() => {
     platform.ready();
     apiGet('/api/catalog/categories').then((data) => setCategories(data.categories || []));
+    apiGet('/api/me', {}, platform).then(setMe).catch(() => setMe({ user: null, isAdmin: false }));
+    apiPost('/api/visits', { source: platform.name }, platform).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -368,8 +548,12 @@ function App() {
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} />}
-      {view === 'orders' && <OrdersScreen platform={platform} />}
-      {!['filters', 'product', 'checkout'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
+      {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} />}
+      {view === 'admin' && <AdminGuard me={me} setView={setView}><AdminMenu setView={setView} /></AdminGuard>}
+      {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} /></AdminGuard>}
+      {view === 'adminVisitors' && <AdminGuard me={me} setView={setView}><AdminVisitorsScreen platform={platform} setView={setView} /></AdminGuard>}
+      {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
+      {!['filters', 'product', 'checkout', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
     </div>
   );
 }

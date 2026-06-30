@@ -14,15 +14,22 @@ function normalizeItems(items) {
 async function upsertTelegramUser(client, identity) {
   if (!identity?.telegramUserId) return null;
   const result = await client.query(`
-    INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, updated_at)
-    VALUES ($1, $2, $3, $4, now())
+    INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, language_code, updated_at)
+    VALUES ($1, $2, $3, $4, $5, now())
     ON CONFLICT (telegram_user_id) DO UPDATE SET
       username = EXCLUDED.username,
       first_name = EXCLUDED.first_name,
       last_name = EXCLUDED.last_name,
+      language_code = EXCLUDED.language_code,
       updated_at = now()
     RETURNING id
-  `, [identity.telegramUserId, identity.username, identity.firstName, identity.lastName]);
+  `, [
+    identity.telegramUserId,
+    identity.username,
+    identity.firstName,
+    identity.lastName,
+    identity.languageCode
+  ]);
   return result.rows[0].id;
 }
 
@@ -110,13 +117,13 @@ export async function createOrder(req) {
         item.quantity,
         JSON.stringify(item.product.params_json || {})
       ]);
-      savedItems.push(saved.rows[0]);
+      savedItems.push({ ...saved.rows[0], product_url: item.product.product_url });
     }
 
     return { order, items: savedItems };
   });
 
-  notifyTelegramManager(result.order, result.items).catch((error) => {
+  notifyTelegramManager(result.order, result.items, identity).catch((error) => {
     console.error('Telegram manager notification failed:', error.message);
   });
 

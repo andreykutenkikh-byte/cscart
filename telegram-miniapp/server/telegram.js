@@ -1,24 +1,27 @@
 import crypto from 'node:crypto';
 
-function parseInitData(initData) {
+export function parseInitData(initData) {
   const params = new URLSearchParams(initData || '');
   const userRaw = params.get('user');
   if (!userRaw) return null;
+
   try {
     const user = JSON.parse(userRaw);
     return {
       telegramUserId: String(user.id),
       username: user.username || null,
       firstName: user.first_name || null,
-      lastName: user.last_name || null
+      lastName: user.last_name || null,
+      languageCode: user.language_code || null,
+      source: 'telegram'
     };
   } catch {
     return null;
   }
 }
 
-function verifyInitData(initData, botToken) {
-  if (!initData || !botToken) return true;
+export function verifyInitData(initData, botToken) {
+  if (!initData || !botToken) return false;
   const params = new URLSearchParams(initData);
   const hash = params.get('hash');
   if (!hash) return false;
@@ -38,48 +41,77 @@ function verifyInitData(initData, botToken) {
   return crypto.timingSafeEqual(calculatedBuffer, hashBuffer);
 }
 
-export function getTelegramIdentity(req) {
+export function getTelegramIdentity(req, { allowDev = true, requireVerified = false } = {}) {
   const initData = req.get('x-telegram-init-data') || req.body?.telegramInitData || '';
   if (initData) {
-    if (!verifyInitData(initData, process.env.TELEGRAM_BOT_TOKEN)) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const isVerified = botToken ? verifyInitData(initData, botToken) : false;
+    if ((botToken || requireVerified) && !isVerified) {
       const error = new Error('Invalid Telegram initData');
       error.statusCode = 401;
       throw error;
     }
-    return parseInitData(initData);
+    const identity = parseInitData(initData);
+    return identity ? { ...identity, isVerified } : null;
   }
 
   const devUserId = req.get('x-dev-telegram-user-id');
-  if (devUserId) {
+  if (allowDev && devUserId) {
     return {
       telegramUserId: `dev:${devUserId}`,
       username: 'dev_browser',
       firstName: 'Browser',
-      lastName: 'Dev'
+      lastName: 'Dev',
+      languageCode: null,
+      source: 'browser',
+      isVerified: false
     };
   }
 
   return null;
 }
 
-export async function notifyTelegramManager(order, items) {
+function formatMoney(value) {
+  if (value === null || value === undefined) return 'not specified';
+  return `${Number(value).toLocaleString('ru-RU')} RUB`;
+}
+
+export async function notifyTelegramManager(order, items, identity = null) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
   if (!token || !chatId) {
     return { skipped: true };
   }
 
+  const adminUrl = process.env.MINIAPP_PUBLIC_URL
+    ? `${process.env.MINIAPP_PUBLIC_URL.replace(/\/$/, '')}/admin/orders`
+    : '';
   const lines = [
-    `Новая заявка DV Keramik #${order.id.slice(0, 8)}`,
-    `Имя: ${order.customer_name}`,
-    `Телефон: ${order.phone}`,
-    `Способ: ${order.delivery_method}`,
-    order.comment ? `Комментарий: ${order.comment}` : '',
+    'New DV Keramik request',
     '',
-    'Товары:',
-    ...items.map((item) => `- ${item.product_name_snapshot} x${item.quantity} (${item.price_snapshot || 0})`),
+    'Customer:',
+    `- Name: ${order.customer_name}`,
+    `- Phone: ${order.phone}`,
+    `- Telegram: ${identity?.username ? `@${identity.username}` : 'not provided'}`,
+    `- Telegram ID: ${identity?.telegramUserId || 'not provided'}`,
+    `- Delivery method: ${order.delivery_method}`,
+    `- Comment: ${order.comment || 'none'}`,
     '',
-    `Итого ориентировочно: ${order.total_price}`
+    'Order:',
+    `- Order ID: ${order.id}`,
+    `- Total preliminary price: ${formatMoney(order.total_price)}`,
+    `- Created at: ${new Date(order.created_at).toISOString()}`,
+    '',
+    'Items:',
+    ...items.flatMap((item) => [
+      `- ${item.product_name_snapshot}`,
+      `  SKU / offer id: ${item.sku || item.product_external_id}`,
+      `  Quantity: ${item.quantity}`,
+      `  Price snapshot: ${formatMoney(item.price_snapshot)}`,
+      item.product_url ? `  Product URL: ${item.product_url}` : ''
+    ]),
+    adminUrl ? '' : '',
+    adminUrl ? `Admin orders: ${adminUrl}` : ''
   ].filter(Boolean);
 
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

@@ -33,10 +33,45 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_ADMIN_CHAT_ID=
 TELEGRAM_BOT_USERNAME=
 MINIAPP_PUBLIC_URL=
+ADMIN_TELEGRAM_USERNAMES=andreykutenkikh
+ADMIN_TELEGRAM_IDS=
 IMPORT_SECRET=change-me
 ```
 
 Telegram bot variables are optional. If they are missing or notification fails, `/api/orders` still saves the request in the database.
+
+## Admin Access
+
+The admin panel is visible in the Orders/Profile area only after the backend confirms admin access with `/api/me`. Admin APIs are protected server-side and do not trust frontend-only checks.
+
+Production admin access requires verified Telegram `initData`. Set one or both:
+
+```bash
+ADMIN_TELEGRAM_USERNAMES=andreykutenkikh
+ADMIN_TELEGRAM_IDS=123456789
+TELEGRAM_BOT_TOKEN=...
+```
+
+Username checks are case-insensitive and ignore a leading `@`. Numeric Telegram ids are preferred when available. If `TELEGRAM_BOT_TOKEN` is missing in production, admin APIs remain closed because initData cannot be verified. For local development only, set `DEV_ADMIN_BYPASS` and send the matching `x-dev-admin-bypass` header while `NODE_ENV` is not `production`.
+
+To find a numeric Telegram user id, open the Mini App with bot credentials configured and check `/api/me`, or use a trusted Telegram user-info bot. Do not rely on a username supplied by a client request without verified Telegram initData.
+
+Admin endpoints:
+
+- `GET /api/admin/settings`
+- `POST /api/admin/import/run`
+- `GET /api/admin/visitors`
+- `GET /api/admin/orders`
+
+## Visitor Tracking
+
+The frontend calls `POST /api/visits` on startup. Telegram visitors are deduplicated by verified Telegram user id when initData is available. Browser fallback visitors are recorded as anonymous/browser visits and do not receive admin rights. The visitor table stores Telegram id, username, name fields, language code, source, first/last seen timestamps, visit count, user agent, and a hashed IP value.
+
+## Order Notifications
+
+When `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` are set, every saved order sends a formatted Telegram message to the admin chat. Notification failure never rolls back the saved order; it is logged and the user still receives success.
+
+Telegram can send a private message only if the target user has started the bot. Alternatively, set `TELEGRAM_ADMIN_CHAT_ID` to a group/channel chat id where the bot is present and allowed to send messages.
 
 ## Local Development
 
