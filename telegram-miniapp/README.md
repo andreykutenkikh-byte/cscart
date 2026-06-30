@@ -29,6 +29,7 @@ Copy `.env.example` to `.env` and adjust values:
 DATABASE_URL=postgres://dvkeramik:dvkeramik@localhost:5432/dvkeramik_miniapp
 DVKERAMIK_YML_URL=https://dvkeramik.ru/yml_get/26
 PORT=3001
+HOST=0.0.0.0
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ADMIN_CHAT_ID=
 TELEGRAM_BOT_USERNAME=
@@ -104,6 +105,8 @@ docker compose exec app node server/import-cli.js
 ```
 
 The `app` service runs migrations before starting the API. The `import-cron` service also runs migrations on boot, imports once, then repeats every 24 hours. Override with `IMPORT_INTERVAL_SECONDS`. PostgreSQL is bound to `127.0.0.1` for local development and is otherwise reachable only by Compose services.
+
+For reverse-proxy production deployments, set `HOST=127.0.0.1` so the Node service is reachable only by the local proxy and public traffic uses HTTPS.
 
 ## Manual Import
 

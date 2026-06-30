@@ -15,6 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(__dirname, '..');
 const app = express();
 const port = Number(process.env.PORT || 3001);
+const host = process.env.HOST || '0.0.0.0';
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -142,8 +143,8 @@ app.use((error, req, res, next) => {
   res.status(statusCode).json({ error: error.message || 'Internal server error' });
 });
 
-const server = app.listen(port, () => {
-  console.log(`DV Keramik Mini App listening on ${port}`);
+const server = app.listen(port, host, () => {
+  console.log(`DV Keramik Mini App listening on ${host}:${port}`);
 });
 
 process.on('SIGTERM', async () => {
