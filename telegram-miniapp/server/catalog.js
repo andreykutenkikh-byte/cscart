@@ -126,12 +126,14 @@ function summarizeProduct(row) {
     sku: row.sku,
     categoryExternalId: row.category_external_id,
     name: row.name,
+    description: row.description,
     slug: row.slug,
     productUrl: row.product_url,
     price: row.price === null ? null : Number(row.price),
     currencyId: row.currency_id,
     available: row.available,
-    imageUrl: row.image_url,
+    imageUrl: row.image_remote_url,
+    remoteImageUrl: row.image_remote_url,
     params: row.params_json || {}
   };
 }
@@ -164,12 +166,12 @@ async function loadCandidateProducts({ categoryId, search, filters }) {
   const result = await query(`
     SELECT p.*,
       (
-        SELECT pi.url
+        SELECT pi.remote_url
         FROM product_images pi
         WHERE pi.product_id = p.id
         ORDER BY pi.sort_order, pi.id
         LIMIT 1
-      ) AS image_url
+      ) AS image_remote_url
     FROM products p
     WHERE ${where.join(' AND ')}
     ORDER BY p.available DESC, p.name ASC
@@ -234,7 +236,7 @@ export async function getProductDetail(id) {
   if (!product) return null;
 
   const images = (await query(`
-    SELECT id, url, sort_order
+    SELECT id, remote_url, sort_order
     FROM product_images
     WHERE product_id = $1
     ORDER BY sort_order, id
@@ -242,9 +244,9 @@ export async function getProductDetail(id) {
   const categories = await getCategoryRows();
 
   return {
-    ...summarizeProduct({ ...product, image_url: images[0]?.url || null }),
+    ...summarizeProduct({ ...product, image_remote_url: images[0]?.remote_url || null }),
     sourceUrl: product.source_url,
-    images: images.map((image) => ({ id: image.id, url: image.url, sortOrder: image.sort_order })),
+    images: images.map((image) => ({ id: image.id, remoteUrl: image.remote_url, sortOrder: image.sort_order })),
     breadcrumb: buildBreadcrumb(categories, product.category_external_id)
   };
 }

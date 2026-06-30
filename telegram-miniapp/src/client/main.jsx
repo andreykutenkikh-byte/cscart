@@ -21,14 +21,15 @@ function flattenCategories(categories, depth = 0) {
 }
 
 function ProductImage({ src, alt }) {
-  if (!src) return <div className="image-fallback">DV</div>;
-  return <img src={src} alt={alt} loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} />;
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <div className="image-fallback">DV</div>;
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
 
 function ProductCard({ product, onOpen, onAdd }) {
   return (
     <article className="product-card" onClick={() => onOpen(product)}>
-      <div className="product-card__image"><ProductImage src={product.imageUrl} alt={product.name} /></div>
+      <div className="product-card__image"><ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} /></div>
       <div className="product-card__body">
         <div className="product-card__name">{product.name}</div>
         <div className="product-card__meta">{product.available ? 'В наличии' : 'Под заказ'} · {product.sku}</div>
@@ -191,10 +192,11 @@ function ProductScreen({ product, setView, onAdd }) {
   return (
     <main className="screen">
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
-      <div className="detail-image"><ProductImage src={product.images?.[0]?.url || product.imageUrl} alt={product.name} /></div>
+      <div className="detail-image"><ProductImage src={product.images?.[0]?.remoteUrl || product.remoteImageUrl || product.imageUrl} alt={product.name} /></div>
       <h1 className="page-title">{product.name}</h1>
       <div className="detail-price">{formatPrice(product.price, product.currencyId)}</div>
       <div className="detail-meta">{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</div>
+      {product.description ? <p className="detail-description">{product.description}</p> : null}
       {product.breadcrumb?.length ? <div className="breadcrumb">{product.breadcrumb.map((item) => item.name).join(' / ')}</div> : null}
       <section className="params">
         {Object.entries(product.params || {}).map(([name, value]) => (

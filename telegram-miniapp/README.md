@@ -2,6 +2,8 @@
 
 Mobile-first Telegram Mini App catalog for DV Keramik. The app imports products from the YML feed into a local PostgreSQL database, serves catalog APIs from that database only, stores request/orders, and can notify a Telegram manager chat when bot credentials are configured.
 
+Graphic and media content stays on the parent DV Keramik server. The Mini App stores textual/catalog data and remote image URL references only; it does not download, proxy, cache, resize, thumbnail, base64-encode, or store image binaries.
+
 ## What Is Included
 
 - React/Vite mobile UI for Home, Catalog, Filters, Product, Cart, Checkout, and Orders.
@@ -10,6 +12,14 @@ Mobile-first Telegram Mini App catalog for DV Keramik. The app imports products 
 - YML importer for `https://dvkeramik.ru/yml_get/26`.
 - Telegram WebApp adapter plus browser fallback and MAX stub.
 - Docker Compose with `db`, `app`, and daily `import-cron` service.
+
+## Catalog Data And Images
+
+The importer downloads only the YML feed from `DVKERAMIK_YML_URL`. It persists category/product text, params, prices, availability, category tree, and order snapshots in PostgreSQL. Product pictures are persisted only as normalized absolute HTTP(S) remote URLs in `product_images.remote_url`.
+
+If the feed contains relative picture paths, the importer normalizes them against the parent source domain. Frontend product cards and product details render those remote URLs directly, so Telegram WebView or the browser loads images from the parent/source server.
+
+User-facing catalog APIs read from the local database only. They do not fetch the YML feed and do not proxy or cache images.
 
 ## Environment
 
@@ -55,11 +65,10 @@ The Express server serves the built Mini App and `/api/*`.
 ```bash
 cp .env.example .env
 docker compose up --build
-docker compose exec app node server/migrate.js
 docker compose exec app node server/import-cli.js
 ```
 
-The `import-cron` service runs migrations on boot, imports once, then repeats every 24 hours. Override with `IMPORT_INTERVAL_SECONDS`.
+The `app` service runs migrations before starting the API. The `import-cron` service also runs migrations on boot, imports once, then repeats every 24 hours. Override with `IMPORT_INTERVAL_SECONDS`. PostgreSQL is bound to `127.0.0.1` for local development and is otherwise reachable only by Compose services.
 
 ## Manual Import
 
@@ -74,7 +83,7 @@ curl -X POST http://localhost:3001/api/admin/import/dvkeramik \
   -H "x-import-secret: $IMPORT_SECRET"
 ```
 
-The endpoint is disabled unless `IMPORT_SECRET` or `ADMIN_IMPORT_SECRET` is configured.
+The endpoint is disabled unless `IMPORT_SECRET` or `ADMIN_IMPORT_SECRET` is configured. The importer stores picture references as remote URLs only; it does not write image files to disk or to database binary fields.
 
 ## API Smoke Checks
 

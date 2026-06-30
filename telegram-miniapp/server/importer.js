@@ -22,8 +22,26 @@ function makeSlug(value, fallback) {
 }
 
 function parsePrice(value) {
-  const numeric = Number(String(value ?? '').replace(',', '.').replace(/[^\d.]/g, ''));
+  const cleaned = String(value ?? '').replace(',', '.').replace(/[^\d.]/g, '');
+  if (!cleaned) return null;
+  const numeric = Number(cleaned);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeRemoteImageUrl(value, sourceUrl) {
+  const raw = asText(value);
+  if (!raw) return '';
+
+  try {
+    const sourceOrigin = new URL(sourceUrl).origin;
+    const remoteUrl = new URL(raw, `${sourceOrigin}/`);
+    if (remoteUrl.protocol !== 'http:' && remoteUrl.protocol !== 'https:') {
+      return '';
+    }
+    return remoteUrl.toString();
+  } catch {
+    return '';
+  }
 }
 
 function normalizeParams(offer) {
@@ -50,7 +68,7 @@ function normalizeParams(offer) {
   return params;
 }
 
-function parseFeed(xml) {
+function parseFeed(xml, { sourceUrl = DEFAULT_SOURCE_URL } = {}) {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '',
@@ -76,13 +94,17 @@ function parseFeed(xml) {
   const offers = asArray(shop.offers?.offer).map((offer) => {
     const externalId = asText(offer.id);
     const name = asText(offer.name) || asText(offer.model) || externalId;
-    const pictures = asArray(offer.picture).map(asText).filter(Boolean);
+    const vendorCode = asText(offer.vendorCode);
+    const pictures = asArray(offer.picture)
+      .map((picture) => normalizeRemoteImageUrl(picture, sourceUrl))
+      .filter(Boolean);
 
     return {
       externalId,
-      sku: externalId,
+      sku: vendorCode || externalId,
       categoryExternalId: asText(offer.categoryId) || null,
       name,
+      description: asText(offer.description) || null,
       slug: makeSlug(name, externalId),
       productUrl: asText(offer.url) || null,
       price: parsePrice(offer.price),
@@ -143,6 +165,7 @@ async function upsertProducts(client, sourceUrl, offers) {
     sku: offer.sku,
     category_external_id: offer.categoryExternalId,
     name: offer.name,
+    description: offer.description,
     slug: offer.slug,
     source_url: sourceUrl,
     product_url: offer.productUrl,
@@ -160,6 +183,7 @@ async function upsertProducts(client, sourceUrl, offers) {
         sku TEXT,
         category_external_id TEXT,
         name TEXT,
+        description TEXT,
         slug TEXT,
         source_url TEXT,
         product_url TEXT,
@@ -171,16 +195,17 @@ async function upsertProducts(client, sourceUrl, offers) {
     )
     INSERT INTO products (
       external_id, sku, category_external_id, name, slug, source_url, product_url,
-      price, currency_id, available, is_active, params_json, imported_at, updated_at
+      description, price, currency_id, available, is_active, params_json, imported_at, updated_at
     )
     SELECT
       external_id, sku, category_external_id, name, slug, source_url, product_url,
-      price, currency_id, available, TRUE, params_json, now(), now()
+      description, price, currency_id, available, TRUE, params_json, now(), now()
     FROM incoming
     ON CONFLICT (external_id) DO UPDATE SET
       sku = EXCLUDED.sku,
       category_external_id = EXCLUDED.category_external_id,
       name = EXCLUDED.name,
+      description = EXCLUDED.description,
       slug = EXCLUDED.slug,
       source_url = EXCLUDED.source_url,
       product_url = EXCLUDED.product_url,
@@ -202,20 +227,20 @@ async function upsertProducts(client, sourceUrl, offers) {
 
   const imageRows = offers.flatMap((offer) => {
     const productId = productIdByExternalId.get(offer.externalId);
-    return offer.pictures.map((url, index) => ({
+    return offer.pictures.map((remoteUrl, index) => ({
       product_id: productId,
-      url,
+      remote_url: remoteUrl,
       sort_order: index
     }));
-  }).filter((image) => image.product_id && image.url);
+  }).filter((image) => image.product_id && image.remote_url);
 
   if (imageRows.length) {
     await client.query(`
-      INSERT INTO product_images (product_id, url, sort_order)
-      SELECT product_id, url, sort_order
+      INSERT INTO product_images (product_id, remote_url, sort_order)
+      SELECT product_id, remote_url, sort_order
       FROM jsonb_to_recordset($1::jsonb) AS image(
         product_id UUID,
-        url TEXT,
+        remote_url TEXT,
         sort_order INTEGER
       )
     `, [JSON.stringify(imageRows)]);
@@ -240,18 +265,19 @@ async function hideMissing(client, table, seenExternalIds) {
 }
 
 export async function importDvKeramikFeed({ sourceUrl = process.env.DVKERAMIK_YML_URL || DEFAULT_SOURCE_URL } = {}) {
-  const { withTransaction } = await import('./db.js');
-  const xml = await fetchFeed(sourceUrl);
-  const parsed = parseFeed(xml);
+  const { query, withTransaction } = await import('./db.js');
+  const runResult = await query(
+    'INSERT INTO import_runs (source_url, status) VALUES ($1, $2) RETURNING id',
+    [sourceUrl, 'running']
+  );
+  const runId = runResult.rows[0].id;
+  let parsed = { categories: [], offers: [] };
 
-  return withTransaction(async (client) => {
-    const runResult = await client.query(
-      'INSERT INTO import_runs (source_url, status) VALUES ($1, $2) RETURNING id',
-      [sourceUrl, 'running']
-    );
-    const runId = runResult.rows[0].id;
+  try {
+    const xml = await fetchFeed(sourceUrl);
+    parsed = parseFeed(xml, { sourceUrl });
 
-    try {
+    const result = await withTransaction(async (client) => {
       const existingProducts = new Set(
         (await client.query('SELECT external_id FROM products')).rows.map((row) => row.external_id)
       );
@@ -265,18 +291,6 @@ export async function importDvKeramikFeed({ sourceUrl = process.env.DVKERAMIK_YM
       const productsHidden = await hideMissing(client, 'products', parsed.offers.map((offer) => offer.externalId));
       await hideMissing(client, 'categories', parsed.categories.map((category) => category.externalId));
 
-      await client.query(`
-        UPDATE import_runs
-        SET finished_at = clock_timestamp(),
-            status = 'success',
-            categories_total = $2,
-            offers_total = $3,
-            products_created = $4,
-            products_updated = $5,
-            products_hidden = $6
-        WHERE id = $1
-      `, [runId, parsed.categories.length, parsed.offers.length, productsCreated, productsUpdated, productsHidden]);
-
       return {
         runId,
         sourceUrl,
@@ -286,15 +300,45 @@ export async function importDvKeramikFeed({ sourceUrl = process.env.DVKERAMIK_YM
         productsUpdated,
         productsHidden
       };
-    } catch (error) {
-      await client.query(`
-        UPDATE import_runs
-        SET finished_at = clock_timestamp(), status = 'failed', error_message = $2
-        WHERE id = $1
-      `, [runId, error.message]);
-      throw error;
-    }
-  });
+    });
+
+    await query(`
+      UPDATE import_runs
+      SET finished_at = clock_timestamp(),
+          status = 'success',
+          categories_total = $2,
+          offers_total = $3,
+          products_created = $4,
+          products_updated = $5,
+          products_hidden = $6
+      WHERE id = $1
+    `, [
+      runId,
+      parsed.categories.length,
+      parsed.offers.length,
+      result.productsCreated,
+      result.productsUpdated,
+      result.productsHidden
+    ]);
+
+    return result;
+  } catch (error) {
+    await query(`
+      UPDATE import_runs
+      SET finished_at = clock_timestamp(),
+          status = 'failed',
+          categories_total = $2,
+          offers_total = $3,
+          error_message = $4
+      WHERE id = $1
+    `, [
+      runId,
+      parsed.categories.length,
+      parsed.offers.length,
+      String(error.message || error).slice(0, 2000)
+    ]);
+    throw error;
+  }
 }
 
 export { parseFeed };

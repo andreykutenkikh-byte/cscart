@@ -336,6 +336,12 @@ button {
   margin: 12px 0;
 }
 
+.detail-description {
+  overflow-wrap: anywhere;
+  color: #3c504b;
+  line-height: 1.45;
+}
+
 .params {
   display: grid;
   gap: 8px;

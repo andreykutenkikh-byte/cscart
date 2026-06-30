@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: dvkeramik
       POSTGRES_PASSWORD: dvkeramik
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - dvkeramik_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgres://dvkeramik:dvkeramik@db:5432/dvkeramik_miniapp
       DVKERAMIK_YML_URL: https://dvkeramik.ru/yml_get/26
       PORT: 3001
+    command: sh -c "node server/migrate.js && node server/index.js"
     ports:
       - "3001:3001"
     depends_on:

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS products (
   sku TEXT NOT NULL,
   category_external_id TEXT,
   name TEXT NOT NULL,
+  description TEXT,
   slug TEXT NOT NULL,
   source_url TEXT NOT NULL,
   product_url TEXT,
@@ -34,6 +35,7 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 CREATE INDEX IF NOT EXISTS idx_products_category_external_id ON products(category_external_id);
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
 CREATE INDEX IF NOT EXISTS idx_products_available ON products(available);
 CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
@@ -42,7 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_products_params_json ON products USING GIN(params
 CREATE TABLE IF NOT EXISTS product_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
+  remote_url TEXT NOT NULL CONSTRAINT product_images_remote_url_http CHECK (remote_url ~* '^https?://'),
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
