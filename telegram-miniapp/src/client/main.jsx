@@ -20,6 +20,13 @@ function flattenCategories(categories, depth = 0) {
   ]);
 }
 
+function getHomeCategories(categories) {
+  if (categories.length === 1 && categories[0].children?.length) {
+    return categories[0].children;
+  }
+  return categories;
+}
+
 function initialViewFromPath() {
   const path = window.location.pathname;
   if (path === '/admin/settings') return 'adminSettings';
@@ -77,7 +84,7 @@ function BottomNav({ view, setView, cartCount }) {
 }
 
 function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setView, onOpen, onAdd }) {
-  const rootCategories = categories.slice(0, 8);
+  const rootCategories = getHomeCategories(categories).slice(0, 8);
   const quickFacets = (facets?.params || []).slice(0, 4).flatMap((facet) =>
     facet.values.slice(0, 3).map((value) => ({ facet: facet.name, value: value.value }))
   ).slice(0, 8);

@@ -59,10 +59,30 @@ function mapCategoryTree(categories) {
 
 export async function getCategories() {
   const result = await query(`
-    SELECT id, external_id, parent_external_id, name, slug
-    FROM categories
-    WHERE is_active = TRUE
-    ORDER BY name
+    WITH RECURSIVE product_categories AS (
+      SELECT DISTINCT c.external_id
+      FROM categories c
+      JOIN products p ON p.category_external_id = c.external_id
+      WHERE c.is_active = TRUE
+        AND p.is_active = TRUE
+    ),
+    visible_categories AS (
+      SELECT c.external_id, c.parent_external_id
+      FROM categories c
+      JOIN product_categories pc ON pc.external_id = c.external_id
+
+      UNION
+
+      SELECT parent.external_id, parent.parent_external_id
+      FROM categories parent
+      JOIN visible_categories child ON child.parent_external_id = parent.external_id
+      WHERE parent.is_active = TRUE
+    )
+    SELECT c.id, c.external_id, c.parent_external_id, c.name, c.slug
+    FROM categories c
+    JOIN visible_categories vc ON vc.external_id = c.external_id
+    WHERE c.is_active = TRUE
+    ORDER BY c.name
   `);
   return mapCategoryTree(result.rows);
 }
