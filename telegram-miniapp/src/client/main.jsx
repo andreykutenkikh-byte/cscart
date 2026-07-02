@@ -147,7 +147,7 @@ function BottomNav({ view, setView, cartCount }) {
 function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, onAdd, cartCount }) {
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
-  const featuredProduct = products[0];
+  const featuredProduct = products.find((product) => product.remoteImageUrl || product.imageUrl) || products[0];
 
   const applyQuickFacet = (chip) => {
     if (chip.type === 'availability') {

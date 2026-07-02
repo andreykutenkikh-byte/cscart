@@ -8,12 +8,31 @@ function asArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
+function decodeXmlEntities(value) {
+  return String(value).replace(/&(#x?[0-9a-fA-F]+|quot|amp|lt|gt|apos);/g, (match, entity) => {
+    if (entity === 'quot') return '"';
+    if (entity === 'amp') return '&';
+    if (entity === 'lt') return '<';
+    if (entity === 'gt') return '>';
+    if (entity === 'apos') return "'";
+    if (entity.startsWith('#x')) {
+      const codePoint = Number.parseInt(entity.slice(2), 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    if (entity.startsWith('#')) {
+      const codePoint = Number.parseInt(entity.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return match;
+  });
+}
+
 function asText(value) {
   if (value === undefined || value === null) return '';
   if (typeof value === 'object') {
-    return String(value['#text'] ?? value.text ?? '').trim();
+    return decodeXmlEntities(value['#text'] ?? value.text ?? '').trim();
   }
-  return String(value).trim();
+  return decodeXmlEntities(value).trim();
 }
 
 function makeSlug(value, fallback) {
