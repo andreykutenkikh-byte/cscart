@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronRight, ArrowLeft, X } from 'lucide-react';
+import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X } from 'lucide-react';
 import { apiGet, apiPost } from './api.js';
 import { addToCart, clearCart, getCartItems, getCartTotal, loadCart, saveCart, updateQuantity } from './cart.js';
 import { getPlatform } from './platform/index.js';
@@ -17,7 +17,33 @@ function formatPrice(value, currency = 'RUB') {
 function formatProductPrice(product) {
   const formatted = formatPrice(product.price, product.currencyId);
   if (formatted === 'Цена по запросу') return formatted;
-  return `${formatted}/м²`;
+  return hasSquareMeterFactor(product) ? `${formatted}/м²` : formatted;
+}
+
+function hasSquareMeterFactor(product) {
+  return Object.entries(product?.params || {}).some(([name, rawValue]) => {
+    const normalizedName = String(name).toLowerCase().replace(/\s+/g, ' ');
+    const value = Array.isArray(rawValue) ? rawValue.join(' ') : rawValue;
+    const normalizedValue = String(value ?? '').trim();
+    const isSquareMeterFactor = normalizedName.includes('штук')
+      && (
+        normalizedName.includes('кв.м')
+        || normalizedName.includes('кв м')
+        || normalizedName.includes('м²')
+        || normalizedName.includes('м2')
+      );
+    return isSquareMeterFactor && normalizedValue && normalizedValue !== '0';
+  });
+}
+
+function getProductImages(product) {
+  const urls = [
+    ...(product?.images || []).map((image) => image.remoteUrl || image.remote_url || image.url),
+    product?.remoteImageUrl,
+    product?.imageUrl
+  ].filter(Boolean);
+  const uniqueUrls = [...new Set(urls)];
+  return uniqueUrls.map((remoteUrl, index) => ({ id: `${remoteUrl}-${index}`, remoteUrl }));
 }
 
 function flattenCategories(categories, depth = 0) {
@@ -103,6 +129,7 @@ function formatDateTime(value) {
 
 function ProductImage({ src, alt }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
   if (!src || failed) return <div className="image-fallback">DV</div>;
   return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
@@ -380,13 +407,62 @@ function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
   );
 }
 
+function ProductGallery({ product }) {
+  const images = useMemo(() => getProductImages(product), [product]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeImage = images[activeIndex];
+  const hasManyImages = images.length > 1;
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [product?.id, product?.externalId, images.length]);
+
+  const goToImage = (direction) => {
+    if (!images.length) return;
+    setActiveIndex((current) => (current + direction + images.length) % images.length);
+  };
+
+  return (
+    <section className="detail-gallery" aria-label="Фотографии товара">
+      <div className="detail-image detail-gallery__stage">
+        <ProductImage src={activeImage?.remoteUrl} alt={product.name} />
+        {hasManyImages ? (
+          <>
+            <button className="detail-gallery__nav prev" onClick={() => goToImage(-1)} aria-label="Предыдущее фото">
+              <ChevronLeft size={22} />
+            </button>
+            <button className="detail-gallery__nav next" onClick={() => goToImage(1)} aria-label="Следующее фото">
+              <ChevronRight size={22} />
+            </button>
+            <span className="detail-gallery__counter">{activeIndex + 1}/{images.length}</span>
+          </>
+        ) : null}
+      </div>
+      {hasManyImages ? (
+        <div className="detail-thumbs" aria-label="Миниатюры товара">
+          {images.map((image, index) => (
+            <button
+              key={image.id}
+              className={index === activeIndex ? 'detail-thumb selected' : 'detail-thumb'}
+              onClick={() => setActiveIndex(index)}
+              aria-label={`Фото ${index + 1}`}
+            >
+              <ProductImage src={image.remoteUrl} alt={`${product.name} ${index + 1}`} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function ProductScreen({ product, setView, onAdd, cartCount }) {
   if (!product) return null;
   return (
     <main className="screen">
       <AppHeader cartCount={cartCount} setView={setView} />
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
-      <div className="detail-image"><ProductImage src={product.images?.[0]?.remoteUrl || product.remoteImageUrl || product.imageUrl} alt={product.name} /></div>
+      <ProductGallery product={product} />
       <h1 className="page-title">{product.name}</h1>
       <div className="detail-price">{formatProductPrice(product)}</div>
       <div className="detail-meta">{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</div>
