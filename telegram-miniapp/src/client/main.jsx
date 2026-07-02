@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronRight, ArrowLeft, X } from 'lucide-react';
 import { apiGet, apiPost } from './api.js';
 import { addToCart, clearCart, getCartItems, getCartTotal, loadCart, saveCart, updateQuantity } from './cart.js';
 import { getPlatform } from './platform/index.js';
@@ -65,6 +65,26 @@ function getQuickFacets(facets) {
     }
   }
   return chips;
+}
+
+function cloneFilters(filters = {}) {
+  const params = Object.fromEntries(
+    Object.entries(filters.params || {}).map(([name, values]) => [
+      name,
+      Array.isArray(values) ? [...values] : [values].filter(Boolean)
+    ])
+  );
+  return { ...filters, params };
+}
+
+function countSelectedFilters(filters = {}) {
+  const paramsCount = Object.values(filters.params || {}).reduce((sum, values) => (
+    sum + (Array.isArray(values) ? values.length : values ? 1 : 0)
+  ), 0);
+  return paramsCount
+    + (filters.availability ? 1 : 0)
+    + (filters.minPrice ? 1 : 0)
+    + (filters.maxPrice ? 1 : 0);
 }
 
 function initialViewFromPath() {
@@ -212,7 +232,7 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
   );
 }
 
-function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, search, setSearch, setView, onOpen, onAdd, loading, cartCount }) {
+function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, search, setSearch, setView, onOpen, onAdd, loading, cartCount, onOpenFilters, selectedFiltersCount }) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
 
@@ -224,7 +244,11 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
           <Search size={18} />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по offers" />
         </label>
-        <button className="filter-button" onClick={() => setView('filters')}><SlidersHorizontal size={18} /><span>Фильтр</span></button>
+        <button className="filter-button" onClick={onOpenFilters}>
+          <SlidersHorizontal size={18} />
+          <span>Фильтр</span>
+          {selectedFiltersCount ? <b>{selectedFiltersCount}</b> : null}
+        </button>
       </div>
       <div className="breadcrumb">{selectedCategory ? `Каталог / ${selectedCategory.name}` : 'Каталог / все категории'}</div>
       <div className="chips category-chips">
@@ -236,7 +260,7 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
         ))}
       </div>
       <div className="result-row">
-        <h1>{selectedCategory?.name || 'Керамогранит'}</h1>
+        <h1>{selectedCategory?.name || 'Товары по фильтру'}</h1>
         <span>{pagination?.total ?? products.length} позиций</span>
       </div>
       {loading ? <div className="empty">Загружаем каталог...</div> : null}
@@ -249,56 +273,110 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
   );
 }
 
-function FiltersScreen({ facets, filters, setFilters, setView }) {
-  const selectedParams = filters.params || {};
+function FloatingFilterButton({ onClick, count }) {
+  return (
+    <button className="mobile-filter-fab" onClick={onClick} aria-label="Открыть фильтры">
+      <SlidersHorizontal size={24} />
+      {count ? <b>{count}</b> : null}
+    </button>
+  );
+}
+
+function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
+  const [draft, setDraft] = useState(() => cloneFilters(filters));
+
+  useEffect(() => {
+    if (open) setDraft(cloneFilters(filters));
+  }, [open, JSON.stringify(filters)]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  if (!open) return null;
+
+  const selectedParams = draft.params || {};
+  const selectedCount = countSelectedFilters(draft);
+
   const toggleParam = (name, value) => {
     const current = new Set(selectedParams[name] || []);
     if (current.has(value)) current.delete(value);
     else current.add(value);
-    setFilters({ ...filters, params: { ...selectedParams, [name]: [...current] } });
+    setDraft({ ...draft, params: { ...selectedParams, [name]: [...current] } });
+  };
+
+  const reset = () => {
+    setDraft({ params: {} });
+  };
+
+  const apply = () => {
+    setFilters(cloneFilters(draft));
+    onClose();
   };
 
   return (
-    <main className="screen">
-      <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Назад</button>
-      <h1 className="page-title">Фильтры</h1>
-      <section className="filter-section">
-        <h2>Наличие</h2>
-        <div className="chips">
-          <button className={filters.availability === 'true' ? 'selected' : ''} onClick={() => setFilters({ ...filters, availability: filters.availability === 'true' ? '' : 'true' })}>В наличии</button>
-          <button className={filters.availability === 'false' ? 'selected' : ''} onClick={() => setFilters({ ...filters, availability: filters.availability === 'false' ? '' : 'false' })}>Под заказ</button>
+    <>
+      <div className="filters-backdrop" onClick={onClose} />
+      <aside className="filters-sheet" role="dialog" aria-modal="true" aria-label="Фильтры">
+        <div className="filters-sheet__grabber" />
+        <header className="filters-sheet__head">
+          <div>
+            <h1>Фильтры</h1>
+            <p>Настройте параметры и нажмите «Применить»</p>
+          </div>
+          <div className="filters-sheet__head-actions">
+            <button className="filters-reset-btn" onClick={reset}>Сбросить</button>
+            <button className="filters-close-btn" onClick={onClose} aria-label="Закрыть фильтры"><X size={20} /></button>
+          </div>
+        </header>
+        <div className="filters-sheet__body">
+          <section className="filter-section">
+            <h2>Наличие</h2>
+            <div className="chips filter-chips">
+              <button className={draft.availability === 'true' ? 'selected' : ''} onClick={() => setDraft({ ...draft, availability: draft.availability === 'true' ? '' : 'true' })}>В наличии</button>
+              <button className={draft.availability === 'false' ? 'selected' : ''} onClick={() => setDraft({ ...draft, availability: draft.availability === 'false' ? '' : 'false' })}>Под заказ</button>
+            </div>
+          </section>
+          {facets?.price?.min !== null ? (
+            <section className="filter-section">
+              <h2>Цена</h2>
+              <div className="price-row">
+                <input inputMode="numeric" placeholder={`от ${facets.price.min}`} value={draft.minPrice || ''} onChange={(event) => setDraft({ ...draft, minPrice: event.target.value })} />
+                <input inputMode="numeric" placeholder={`до ${facets.price.max}`} value={draft.maxPrice || ''} onChange={(event) => setDraft({ ...draft, maxPrice: event.target.value })} />
+              </div>
+            </section>
+          ) : null}
+          {(facets?.params || []).map((facet) => (
+            <section className="filter-section" key={facet.name}>
+              <h2>{facet.name}</h2>
+              <div className="chips filter-chips">
+                {facet.values.slice(0, 18).map((item) => (
+                  <button
+                    key={item.value}
+                    className={(selectedParams[facet.name] || []).includes(item.value) ? 'selected' : ''}
+                    onClick={() => toggleParam(facet.name, item.value)}
+                  >
+                    {item.value} <small>{item.count}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
-      </section>
-      {facets?.price?.min !== null ? (
-        <section className="filter-section">
-          <h2>Цена</h2>
-          <div className="price-row">
-            <input inputMode="numeric" placeholder={`от ${facets.price.min}`} value={filters.minPrice || ''} onChange={(event) => setFilters({ ...filters, minPrice: event.target.value })} />
-            <input inputMode="numeric" placeholder={`до ${facets.price.max}`} value={filters.maxPrice || ''} onChange={(event) => setFilters({ ...filters, maxPrice: event.target.value })} />
-          </div>
-        </section>
-      ) : null}
-      {(facets?.params || []).map((facet) => (
-        <section className="filter-section" key={facet.name}>
-          <h2>{facet.name}</h2>
-          <div className="chips">
-            {facet.values.slice(0, 18).map((item) => (
-              <button
-                key={item.value}
-                className={(selectedParams[facet.name] || []).includes(item.value) ? 'selected' : ''}
-                onClick={() => toggleParam(facet.name, item.value)}
-              >
-                {item.value} <small>{item.count}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      ))}
-      <div className="sticky-actions">
-        <button className="secondary" onClick={() => setFilters({ params: {} })}>Сбросить</button>
-        <button className="primary" onClick={() => setView('catalog')}>Показать</button>
-      </div>
-    </main>
+        <footer className="filters-sheet__actions">
+          <button className="secondary" onClick={reset}>Сбросить</button>
+          <button className="primary" onClick={apply}>
+            <Search size={17} />
+            <span>{selectedCount ? `Применить (${selectedCount})` : 'Применить'}</span>
+          </button>
+        </footer>
+      </aside>
+    </>
   );
 }
 
@@ -606,6 +684,7 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState(loadCart());
   const [me, setMe] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const categoriesFlat = useMemo(() => flattenCategories(categories), [categories]);
 
@@ -622,6 +701,7 @@ function App() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
+    if (view !== 'catalog') setFiltersOpen(false);
   }, [view]);
 
   useEffect(() => {
@@ -648,12 +728,12 @@ function App() {
   };
 
   const cartCount = getCartItems(cart).reduce((sum, item) => sum + item.quantity, 0);
+  const selectedFiltersCount = countSelectedFilters(filters);
 
   return (
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} onAdd={onAdd} cartCount={cartCount} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
-      {view === 'filters' && <FiltersScreen facets={facets} filters={filters} setFilters={setFilters} setView={setView} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} onOpenFilters={() => setFiltersOpen(true)} selectedFiltersCount={selectedFiltersCount} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
@@ -662,7 +742,9 @@ function App() {
       {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminVisitors' && <AdminGuard me={me} setView={setView}><AdminVisitorsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
-      {!['filters', 'product', 'checkout', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
+      {view === 'catalog' ? <FloatingFilterButton onClick={() => setFiltersOpen(true)} count={selectedFiltersCount} /> : null}
+      <FiltersSheet open={filtersOpen} facets={facets} filters={filters} setFilters={setFilters} onClose={() => setFiltersOpen(false)} />
+      {!['product', 'checkout', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
     </div>
   );
 }
