@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X } from 'lucide-react';
 import { apiGet, apiPost } from './api.js';
@@ -111,6 +111,17 @@ function countSelectedFilters(filters = {}) {
     + (filters.availability ? 1 : 0)
     + (filters.minPrice ? 1 : 0)
     + (filters.maxPrice ? 1 : 0);
+}
+
+function useDebouncedValue(value, delay = 300) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
 }
 
 function initialViewFromPath() {
@@ -761,8 +772,11 @@ function App() {
   const [cart, setCart] = useState(loadCart());
   const [me, setMe] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const catalogRequestRef = useRef(0);
 
   const categoriesFlat = useMemo(() => flattenCategories(categories), [categories]);
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   useEffect(() => {
     platform.ready();
@@ -781,17 +795,28 @@ function App() {
   }, [view]);
 
   useEffect(() => {
+    const requestId = catalogRequestRef.current + 1;
+    catalogRequestRef.current = requestId;
+    const currentFilters = cloneFilters(filters);
     setLoading(true);
-    const query = { categoryId, search, filters, page: 1, limit: 24 };
+    const query = { categoryId, search: debouncedSearch, filters: currentFilters, page: 1, limit: 24 };
     Promise.all([
       apiGet('/api/catalog/products', query),
-      apiGet('/api/catalog/facets', { categoryId, search, filters })
+      apiGet('/api/catalog/facets', { categoryId, search: debouncedSearch, filters: currentFilters })
     ]).then(([productData, facetData]) => {
+      if (catalogRequestRef.current !== requestId) return;
       setProducts(productData.products || []);
       setPagination(productData.pagination);
       setFacets(facetData.facets);
-    }).finally(() => setLoading(false));
-  }, [categoryId, search, JSON.stringify(filters)]);
+    }).catch(() => {
+      if (catalogRequestRef.current !== requestId) return;
+      setProducts([]);
+      setPagination(null);
+      setFacets(null);
+    }).finally(() => {
+      if (catalogRequestRef.current === requestId) setLoading(false);
+    });
+  }, [categoryId, debouncedSearch, filtersKey]);
 
   const openProduct = async (product) => {
     const detail = await apiGet(`/api/catalog/products/${encodeURIComponent(product.externalId)}`);
