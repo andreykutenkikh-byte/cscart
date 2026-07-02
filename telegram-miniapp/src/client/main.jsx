@@ -10,7 +10,14 @@ const platform = getPlatform();
 
 function formatPrice(value, currency = 'RUB') {
   if (value === null || value === undefined) return 'Цена по запросу';
-  return `${Number(value).toLocaleString('ru-RU')} ${currency || ''}`.trim();
+  const symbol = currency === 'RUB' ? '₽' : currency || '';
+  return `${Number(value).toLocaleString('ru-RU')} ${symbol}`.trim();
+}
+
+function formatProductPrice(product) {
+  const formatted = formatPrice(product.price, product.currencyId);
+  if (formatted === 'Цена по запросу') return formatted;
+  return `${formatted}/м²`;
 }
 
 function flattenCategories(categories, depth = 0) {
@@ -25,6 +32,39 @@ function getHomeCategories(categories) {
     return categories[0].children;
   }
   return categories;
+}
+
+function getCategoryCards(categories, facets) {
+  const facetCategories = facets?.category || [];
+  if (facetCategories.length) return facetCategories.slice(0, 8);
+  return getHomeCategories(categories).slice(0, 8).map((category) => ({
+    externalId: category.externalId,
+    name: category.name,
+    count: null
+  }));
+}
+
+function getProductMeta(product) {
+  const params = product.params || {};
+  return params['Размер материала'] || params['Размер'] || params['Материал'] || product.sku;
+}
+
+function getQuickFacets(facets) {
+  const chips = [];
+  if (facets?.availability?.available) {
+    chips.push({ type: 'availability', label: 'В наличии', value: 'true' });
+  }
+  const preferredGroups = ['size', 'surface', 'color'];
+  const params = (facets?.params || [])
+    .filter((facet) => preferredGroups.includes(facet.group))
+    .slice(0, 4);
+  for (const facet of params) {
+    for (const item of facet.values.slice(0, 2)) {
+      chips.push({ type: 'param', label: item.value, facet: facet.name, value: item.value });
+      if (chips.length >= 8) return chips;
+    }
+  }
+  return chips;
 }
 
 function initialViewFromPath() {
@@ -47,15 +87,36 @@ function ProductImage({ src, alt }) {
   return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
 }
 
+function AppHeader({ cartCount = 0, setView }) {
+  return (
+    <header className="app-header">
+      <button className="brand-lockup" onClick={() => setView('home')} aria-label="На главную">
+        <span className="brand-mark">ДК</span>
+        <span>
+          <strong>ДВ Керамик</strong>
+          <small>каталог обновляется ежедневно</small>
+        </span>
+      </button>
+      <button className="header-action" onClick={() => setView('cart')} aria-label="Открыть корзину">
+        <ShoppingCart size={18} />
+        {cartCount > 0 ? <b>{cartCount}</b> : null}
+      </button>
+    </header>
+  );
+}
+
 function ProductCard({ product, onOpen, onAdd }) {
   return (
     <article className="product-card" onClick={() => onOpen(product)}>
-      <div className="product-card__image"><ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} /></div>
+      <div className="product-card__image">
+        <ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} />
+        <span className={product.available ? 'product-tag stock' : 'product-tag'}>{product.available ? 'склад' : 'заказ'}</span>
+      </div>
       <div className="product-card__body">
         <div className="product-card__name">{product.name}</div>
-        <div className="product-card__meta">{product.available ? 'В наличии' : 'Под заказ'} · {product.sku}</div>
+        <div className="product-card__meta">{getProductMeta(product)}</div>
         <div className="product-card__bottom">
-          <strong>{formatPrice(product.price, product.currencyId)}</strong>
+          <strong>{formatProductPrice(product)}</strong>
           <button className="icon-button" onClick={(event) => { event.stopPropagation(); onAdd(product); }}>+</button>
         </div>
       </div>
@@ -83,68 +144,101 @@ function BottomNav({ view, setView, cartCount }) {
   );
 }
 
-function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setView, onOpen, onAdd }) {
-  const rootCategories = getHomeCategories(categories).slice(0, 8);
-  const quickFacets = (facets?.params || []).slice(0, 4).flatMap((facet) =>
-    facet.values.slice(0, 3).map((value) => ({ facet: facet.name, value: value.value }))
-  ).slice(0, 8);
+function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, onAdd, cartCount }) {
+  const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
+  const quickFacets = getQuickFacets(facets).slice(0, 4);
+  const featuredProduct = products[0];
+
+  const applyQuickFacet = (chip) => {
+    if (chip.type === 'availability') {
+      setFilters({ params: {}, availability: chip.value });
+    } else {
+      setFilters({ params: { [chip.facet]: [chip.value] } });
+    }
+    setView('catalog');
+  };
 
   return (
     <main className="screen">
-      <section className="hero">
-        <p>DV Keramik</p>
-        <h1>Плитка, мозаика и материалы рядом</h1>
-      </section>
+      <AppHeader cartCount={cartCount} setView={setView} />
       <label className="search-box">
         <Search size={18} />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по каталогу" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Найти плитку, коллекцию, размер..." />
       </label>
+      <section className="hero">
+        <div>
+          <h1>Каталог плитки с актуальными остатками</h1>
+          <p>Категории и фильтры собираются из файла импорта.</p>
+          <button onClick={() => setView('catalog')}>В каталог</button>
+        </div>
+        <div className="hero__media">
+          <ProductImage src={featuredProduct?.remoteImageUrl || featuredProduct?.imageUrl} alt={featuredProduct?.name || 'Плитка'} />
+        </div>
+      </section>
       <section>
-        <div className="section-title"><h2>Категории</h2></div>
+        <div className="section-title"><h2>Разделы из выгрузки</h2></div>
         <div className="category-grid">
-          {rootCategories.map((category) => (
+          {categoryCards.map((category, index) => (
             <button key={category.externalId} onClick={() => { setCategoryId(category.externalId); setView('catalog'); }}>
-              {category.name}<ChevronRight size={16} />
+              <span className="category-icon"><LayoutGrid size={17} /></span>
+              <span className="category-copy">
+                <strong>{category.name}</strong>
+                <small>{category.count ? `${category.count} товаров` : 'из categoryId'}</small>
+              </span>
+              {index === 0 ? <ChevronRight className="category-arrow" size={14} /> : null}
             </button>
           ))}
         </div>
       </section>
       {quickFacets.length ? (
         <section>
-          <div className="section-title"><h2>Быстрый выбор</h2></div>
+          <div className="section-title"><h2>Быстрый подбор</h2></div>
           <div className="chips">
-            {quickFacets.map((chip) => <span key={`${chip.facet}:${chip.value}`}>{chip.value}</span>)}
+            {quickFacets.map((chip, index) => (
+              <button className={index === 0 ? 'selected' : ''} key={`${chip.type}:${chip.facet || ''}:${chip.value}`} onClick={() => applyQuickFacet(chip)}>
+                {chip.label}
+              </button>
+            ))}
           </div>
         </section>
       ) : null}
       <section>
-        <div className="section-title"><h2>Популярное</h2><button onClick={() => setView('catalog')}>Все</button></div>
+        <div className="section-title"><h2>Популярное из offers</h2><button onClick={() => setView('catalog')}>Все</button></div>
         <div className="product-list">
-          {products.slice(0, 8).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
+          {products.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
         </div>
       </section>
     </main>
   );
 }
 
-function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, search, setSearch, setView, onOpen, onAdd, loading }) {
+function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, search, setSearch, setView, onOpen, onAdd, loading, cartCount }) {
+  const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
+  const categoryChips = (facets?.category || []).slice(0, 10);
+
   return (
     <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
       <div className="toolbar">
         <label className="search-box compact">
           <Search size={18} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Название, цвет, размер" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по offers" />
         </label>
-        <button className="filter-button" onClick={() => setView('filters')}><SlidersHorizontal size={20} /></button>
+        <button className="filter-button" onClick={() => setView('filters')}><SlidersHorizontal size={18} /><span>Фильтр</span></button>
       </div>
-      <select className="select" value={categoryId || ''} onChange={(event) => setCategoryId(event.target.value || '')}>
-        <option value="">Все категории</option>
-        {categoriesFlat.map((category) => (
-          <option key={category.externalId} value={category.externalId}>
-            {'— '.repeat(category.depth)}{category.name}
-          </option>
+      <div className="breadcrumb">{selectedCategory ? `Каталог / ${selectedCategory.name}` : 'Каталог / все категории'}</div>
+      <div className="chips category-chips">
+        <button className={!categoryId ? 'selected' : ''} onClick={() => setCategoryId('')}>Все</button>
+        {categoryChips.map((category) => (
+          <button key={category.externalId} className={categoryId === category.externalId ? 'selected' : ''} onClick={() => setCategoryId(category.externalId)}>
+            {category.name}
+          </button>
         ))}
-      </select>
+      </div>
+      <div className="result-row">
+        <h1>{selectedCategory?.name || 'Керамогранит'}</h1>
+        <span>{pagination?.total ?? products.length} позиций</span>
+      </div>
       {loading ? <div className="empty">Загружаем каталог...</div> : null}
       {!loading && !products.length ? <div className="empty">Ничего не найдено</div> : null}
       <div className="product-list">
@@ -208,14 +302,15 @@ function FiltersScreen({ facets, filters, setFilters, setView }) {
   );
 }
 
-function ProductScreen({ product, setView, onAdd }) {
+function ProductScreen({ product, setView, onAdd, cartCount }) {
   if (!product) return null;
   return (
     <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
       <div className="detail-image"><ProductImage src={product.images?.[0]?.remoteUrl || product.remoteImageUrl || product.imageUrl} alt={product.name} /></div>
       <h1 className="page-title">{product.name}</h1>
-      <div className="detail-price">{formatPrice(product.price, product.currencyId)}</div>
+      <div className="detail-price">{formatProductPrice(product)}</div>
       <div className="detail-meta">{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</div>
       {product.description ? <p className="detail-description">{product.description}</p> : null}
       {product.breadcrumb?.length ? <div className="breadcrumb">{product.breadcrumb.map((item) => item.name).join(' / ')}</div> : null}
@@ -230,10 +325,11 @@ function ProductScreen({ product, setView, onAdd }) {
   );
 }
 
-function CartScreen({ cart, setCart, setView }) {
+function CartScreen({ cart, setCart, setView, cartCount }) {
   const items = getCartItems(cart);
   return (
     <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
       <h1 className="page-title">Корзина</h1>
       {!items.length ? <div className="empty">Корзина пока пустая</div> : null}
       <div className="cart-list">
@@ -262,7 +358,7 @@ function CartScreen({ cart, setCart, setView }) {
   );
 }
 
-function CheckoutScreen({ cart, platform, setCart, setView }) {
+function CheckoutScreen({ cart, platform, setCart, setView, cartCount }) {
   const [form, setForm] = useState({ name: platform.user?.firstName || '', phone: '', deliveryMethod: 'pickup', comment: '' });
   const [status, setStatus] = useState('');
   const items = getCartItems(cart);
@@ -289,6 +385,7 @@ function CheckoutScreen({ cart, platform, setCart, setView }) {
 
   return (
     <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
       <button className="back-button" onClick={() => setView('cart')}><ArrowLeft size={18} /> Корзина</button>
       <h1 className="page-title">Заявка менеджеру</h1>
       <form className="checkout-form" onSubmit={submit}>
@@ -318,7 +415,7 @@ function AdminEntry({ setView }) {
   );
 }
 
-function OrdersScreen({ platform, me, setView }) {
+function OrdersScreen({ platform, me, setView, cartCount }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -327,6 +424,7 @@ function OrdersScreen({ platform, me, setView }) {
 
   return (
     <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
       {me?.isAdmin ? <AdminEntry setView={setView} /> : null}
       <h1 className="page-title">Заявки</h1>
       {loading ? <div className="empty">Загружаем...</div> : null}
@@ -523,6 +621,10 @@ function App() {
   }, [cart]);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
+
+  useEffect(() => {
     setLoading(true);
     const query = { categoryId, search, filters, page: 1, limit: 24 };
     Promise.all([
@@ -549,13 +651,13 @@ function App() {
 
   return (
     <div className="app-shell">
-      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setView={setView} onOpen={openProduct} onAdd={onAdd} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} />}
+      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} onAdd={onAdd} cartCount={cartCount} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
       {view === 'filters' && <FiltersScreen facets={facets} filters={filters} setFilters={setFilters} setView={setView} />}
-      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} />}
-      {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} />}
-      {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} />}
-      {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} />}
+      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
+      {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
+      {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
+      {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} cartCount={cartCount} />}
       {view === 'admin' && <AdminGuard me={me} setView={setView}><AdminMenu setView={setView} /></AdminGuard>}
       {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminVisitors' && <AdminGuard me={me} setView={setView}><AdminVisitorsScreen platform={platform} setView={setView} /></AdminGuard>}
