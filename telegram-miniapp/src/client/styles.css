@@ -530,23 +530,6 @@ button {
   margin-bottom: 14px;
 }
 
-.filter-button {
-  position: relative;
-  display: inline-flex;
-  min-height: 42px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0 12px;
-  border-radius: 14px;
-  background: #b3121b;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.filter-button b,
 .mobile-filter-fab b {
   position: absolute;
   display: grid;
@@ -558,11 +541,6 @@ button {
   color: #b3121b;
   font-size: 10px;
   line-height: 1;
-}
-
-.filter-button b {
-  top: -6px;
-  right: -6px;
 }
 
 .mobile-filter-fab {
@@ -1204,7 +1182,4 @@ button {
     font-size: 13px;
   }
 
-  .filter-button span {
-    display: none;
-  }
 }
