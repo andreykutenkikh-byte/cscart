@@ -15,6 +15,7 @@ function formatPrice(value, currency = 'RUB') {
 }
 
 function formatProductPrice(product) {
+  if (!product) return formatPrice(null);
   const formatted = formatPrice(product.price, product.currencyId);
   if (formatted === 'Цена по запросу') return formatted;
   return hasSquareMeterFactor(product) ? `${formatted}/м²` : formatted;
@@ -71,8 +72,8 @@ function getCategoryCards(categories, facets) {
 }
 
 function getProductMeta(product) {
-  const params = product.params || {};
-  return params['Размер материала'] || params['Размер'] || params['Материал'] || product.sku;
+  const params = product?.params || {};
+  return params['Размер материала'] || params['Размер'] || params['Материал'] || product?.sku || '';
 }
 
 function getQuickFacets(facets) {
@@ -111,6 +112,90 @@ function countSelectedFilters(filters = {}) {
     + (filters.availability ? 1 : 0)
     + (filters.minPrice ? 1 : 0)
     + (filters.maxPrice ? 1 : 0);
+}
+
+function getFacetGroups(facets) {
+  if (facets?.groups?.length) return facets.groups;
+  const groups = [];
+  if (facets?.availability) {
+    groups.push({
+      key: 'availability',
+      label: 'Наличие',
+      type: 'checkbox',
+      selectedCount: 0,
+      options: [
+        { value: 'available', label: 'В наличии', count: facets.availability.available || 0 },
+        { value: 'on_order', label: 'Под заказ', count: facets.availability.unavailable || 0 }
+      ].filter((option) => option.count > 0)
+    });
+  }
+  if (facets?.price && facets.price.min !== null && facets.price.min !== undefined) {
+    groups.push({ key: 'price', label: 'Цена', type: 'range', min: facets.price.min, max: facets.price.max, selectedMin: null, selectedMax: null });
+  }
+  for (const facet of facets?.params || []) {
+    groups.push({
+      key: `param:${facet.name}`,
+      paramName: facet.name,
+      label: facet.name,
+      type: 'checkbox',
+      selectedCount: 0,
+      options: facet.values.map((item) => ({ value: item.value, label: item.value, count: item.count }))
+    });
+  }
+  return groups;
+}
+
+function findFacetOption(groups, groupKey, value) {
+  return groups
+    .find((group) => group.key === groupKey)
+    ?.options
+    ?.find((option) => option.value === value);
+}
+
+function getSelectedFilterItems(filters = {}, facets) {
+  const groups = getFacetGroups(facets);
+  const items = [];
+  if (filters.availability) {
+    const value = filters.availability === 'false' || filters.availability === false ? 'on_order' : 'available';
+    const option = findFacetOption(groups, 'availability', value);
+    items.push({ id: 'availability', type: 'availability', groupKey: 'availability', label: option?.label || (value === 'available' ? 'В наличии' : 'Под заказ'), groupLabel: 'Наличие' });
+  }
+  if (filters.minPrice) {
+    items.push({ id: 'minPrice', type: 'minPrice', label: `от ${filters.minPrice}`, groupLabel: 'Цена' });
+  }
+  if (filters.maxPrice) {
+    items.push({ id: 'maxPrice', type: 'maxPrice', label: `до ${filters.maxPrice}`, groupLabel: 'Цена' });
+  }
+  for (const [paramName, values] of Object.entries(filters.params || {})) {
+    for (const value of Array.isArray(values) ? values : [values]) {
+      const groupKey = `param:${paramName}`;
+      const option = findFacetOption(groups, groupKey, value);
+      items.push({
+        id: `${groupKey}:${value}`,
+        type: 'param',
+        groupKey,
+        paramName,
+        value,
+        label: option?.label || value,
+        groupLabel: groups.find((group) => group.key === groupKey)?.label || paramName
+      });
+    }
+  }
+  return items;
+}
+
+function removeFilterItem(filters, item) {
+  const next = cloneFilters(filters);
+  if (item.type === 'availability') delete next.availability;
+  if (item.type === 'minPrice') delete next.minPrice;
+  if (item.type === 'maxPrice') delete next.maxPrice;
+  if (item.type === 'param') {
+    const current = new Set(next.params?.[item.paramName] || []);
+    current.delete(item.value);
+    next.params = { ...(next.params || {}), [item.paramName]: [...current] };
+    if (!next.params[item.paramName].length) delete next.params[item.paramName];
+  }
+  return next;
 }
 
 function useDebouncedValue(value, delay = 300) {
@@ -164,6 +249,7 @@ function AppHeader({ cartCount = 0, setView }) {
 }
 
 function ProductCard({ product, onOpen, onAdd }) {
+  if (!product) return null;
   return (
     <article className="product-card" onClick={() => onOpen(product)}>
       <div className="product-card__image">
@@ -205,7 +291,8 @@ function BottomNav({ view, setView, cartCount }) {
 function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, onAdd, cartCount }) {
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
-  const featuredProduct = products.find((product) => product.remoteImageUrl || product.imageUrl) || products[0];
+  const visibleProducts = products.filter(Boolean);
+  const featuredProduct = visibleProducts.find((product) => product.remoteImageUrl || product.imageUrl) || visibleProducts[0];
 
   const applyQuickFacet = (chip) => {
     if (chip.type === 'availability') {
@@ -263,16 +350,18 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
       <section>
         <div className="section-title"><h2>Популярное из offers</h2><button onClick={() => setView('catalog')}>Все</button></div>
         <div className="product-list">
-          {products.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
+          {visibleProducts.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
         </div>
       </section>
     </main>
   );
 }
 
-function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, search, setSearch, setView, onOpen, onAdd, loading, cartCount }) {
+function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, filters, setFilters, search, setSearch, setView, onOpen, onAdd, loading, cartCount }) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
+  const selectedFilterItems = getSelectedFilterItems(filters, facets);
+  const visibleProducts = products.filter(Boolean);
 
   return (
     <main className="screen">
@@ -284,6 +373,22 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
         </label>
       </div>
       <div className="breadcrumb">{selectedCategory ? `Каталог / ${selectedCategory.name}` : 'Каталог / все категории'}</div>
+      {selectedFilterItems.length ? (
+        <section className="selected-filters-panel">
+          <div className="selected-filters-panel__head">
+            <span>Выбрано</span>
+            <button onClick={() => setFilters({ params: {} })}>очистить</button>
+          </div>
+          <div className="selected-filter-chips">
+            {selectedFilterItems.slice(0, 8).map((item) => (
+              <button key={item.id} onClick={() => setFilters(removeFilterItem(filters, item))}>
+                <span>{item.label}</span>
+                <X size={13} />
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
       <div className="chips category-chips">
         <button className={!categoryId ? 'selected' : ''} onClick={() => setCategoryId('')}>Все</button>
         {categoryChips.map((category) => (
@@ -297,9 +402,9 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
         <span>{pagination?.total ?? products.length} позиций</span>
       </div>
       {loading ? <div className="empty">Загружаем каталог...</div> : null}
-      {!loading && !products.length ? <div className="empty">Ничего не найдено</div> : null}
+      {!loading && !visibleProducts.length ? <div className="empty">Ничего не найдено</div> : null}
       <div className="product-list">
-        {products.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
+        {visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
       </div>
       {pagination?.hasNextPage ? <div className="empty">Показана первая страница. Уточните поиск или фильтры.</div> : null}
     </main>
@@ -317,9 +422,15 @@ function FloatingFilterButton({ onClick, count }) {
 
 function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
   const [draft, setDraft] = useState(() => cloneFilters(filters));
+  const [activeGroupKey, setActiveGroupKey] = useState('all');
+  const [filterSearch, setFilterSearch] = useState('');
 
   useEffect(() => {
-    if (open) setDraft(cloneFilters(filters));
+    if (open) {
+      setDraft(cloneFilters(filters));
+      setActiveGroupKey('all');
+      setFilterSearch('');
+    }
   }, [open, JSON.stringify(filters)]);
 
   useEffect(() => {
@@ -333,14 +444,45 @@ function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
 
   if (!open) return null;
 
-  const selectedParams = draft.params || {};
+  const groups = getFacetGroups(facets);
+  const normalizedSearch = filterSearch.trim().toLowerCase();
+  const selectedItems = getSelectedFilterItems(draft, { ...facets, groups });
   const selectedCount = countSelectedFilters(draft);
+  const visibleGroups = groups.filter((group) => {
+    if (!normalizedSearch) return true;
+    return String(group.label).toLowerCase().includes(normalizedSearch)
+      || group.options?.some((option) => String(option.label).toLowerCase().includes(normalizedSearch));
+  });
+  const activeGroup = activeGroupKey === 'all'
+    ? { key: 'all', label: 'Все фильтры', type: 'summary' }
+    : (normalizedSearch
+      ? visibleGroups.find((group) => group.key === activeGroupKey) || visibleGroups[0]
+      : groups.find((group) => group.key === activeGroupKey)) || groups[0] || { key: 'all', label: 'Все фильтры', type: 'summary' };
+
+  const groupSelectedCount = (group) => {
+    if (group.key === 'availability') return draft.availability ? 1 : 0;
+    if (group.key === 'price') return (draft.minPrice ? 1 : 0) + (draft.maxPrice ? 1 : 0);
+    if (group.key?.startsWith('param:')) return (draft.params?.[group.paramName || group.key.slice(6)] || []).length;
+    return 0;
+  };
 
   const toggleParam = (name, value) => {
+    const selectedParams = draft.params || {};
     const current = new Set(selectedParams[name] || []);
     if (current.has(value)) current.delete(value);
     else current.add(value);
     setDraft({ ...draft, params: { ...selectedParams, [name]: [...current] } });
+  };
+
+  const toggleGroupOption = (group, option) => {
+    if (group.key === 'availability') {
+      const nextValue = option.value === 'available' ? 'true' : 'false';
+      setDraft({ ...draft, availability: draft.availability === nextValue ? '' : nextValue });
+      return;
+    }
+    if (group.key?.startsWith('param:')) {
+      toggleParam(group.paramName || group.key.slice(6), option.value);
+    }
   };
 
   const reset = () => {
@@ -352,64 +494,116 @@ function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
     onClose();
   };
 
-  return (
-    <>
-      <div className="filters-backdrop" onClick={onClose} />
-      <aside className="filters-sheet" role="dialog" aria-modal="true" aria-label="Фильтры">
-        <div className="filters-sheet__grabber" />
-        <header className="filters-sheet__head">
-          <div>
-            <h1>Фильтры</h1>
-            <p>Настройте параметры и нажмите «Применить»</p>
-          </div>
-          <div className="filters-sheet__head-actions">
-            <button className="filters-reset-btn" onClick={reset}>Сбросить</button>
-            <button className="filters-close-btn" onClick={onClose} aria-label="Закрыть фильтры"><X size={20} /></button>
-          </div>
-        </header>
-        <div className="filters-sheet__body">
-          <section className="filter-section">
-            <h2>Наличие</h2>
-            <div className="chips filter-chips">
-              <button className={draft.availability === 'true' ? 'selected' : ''} onClick={() => setDraft({ ...draft, availability: draft.availability === 'true' ? '' : 'true' })}>В наличии</button>
-              <button className={draft.availability === 'false' ? 'selected' : ''} onClick={() => setDraft({ ...draft, availability: draft.availability === 'false' ? '' : 'false' })}>Под заказ</button>
-            </div>
-          </section>
-          {facets?.price?.min !== null ? (
-            <section className="filter-section">
-              <h2>Цена</h2>
-              <div className="price-row">
-                <input inputMode="numeric" placeholder={`от ${facets.price.min}`} value={draft.minPrice || ''} onChange={(event) => setDraft({ ...draft, minPrice: event.target.value })} />
-                <input inputMode="numeric" placeholder={`до ${facets.price.max}`} value={draft.maxPrice || ''} onChange={(event) => setDraft({ ...draft, maxPrice: event.target.value })} />
-              </div>
-            </section>
-          ) : null}
-          {(facets?.params || []).map((facet) => (
-            <section className="filter-section" key={facet.name}>
-              <h2>{facet.name}</h2>
-              <div className="chips filter-chips">
-                {facet.values.slice(0, 18).map((item) => (
-                  <button
-                    key={item.value}
-                    className={(selectedParams[facet.name] || []).includes(item.value) ? 'selected' : ''}
-                    onClick={() => toggleParam(facet.name, item.value)}
-                  >
-                    {item.value} <small>{item.count}</small>
-                  </button>
-                ))}
-              </div>
-            </section>
+  const removeDraftItem = (item) => {
+    setDraft(removeFilterItem(draft, item));
+  };
+
+  const optionsForActiveGroup = (activeGroup.options || [])
+    .filter((option) => !normalizedSearch || String(option.label).toLowerCase().includes(normalizedSearch) || String(activeGroup.label).toLowerCase().includes(normalizedSearch));
+
+  const renderActivePanel = () => {
+    if (!facets) {
+      return <div className="filter-empty-state">Загружаем фильтры...</div>;
+    }
+    if (!groups.length) {
+      return <div className="filter-empty-state">Для текущей категории нет доступных фильтров.</div>;
+    }
+    if (normalizedSearch && !visibleGroups.length) {
+      return <div className="filter-empty-state">Ничего не найдено по запросу.</div>;
+    }
+    if (activeGroup.type === 'summary') {
+      return selectedItems.length ? (
+        <div className="dns-selected-list">
+          {selectedItems.map((item) => (
+            <button key={item.id} onClick={() => removeDraftItem(item)}>
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.groupLabel}</small>
+              </span>
+              <X size={17} />
+            </button>
           ))}
         </div>
-        <footer className="filters-sheet__actions">
-          <button className="secondary" onClick={reset}>Сбросить</button>
-          <button className="primary" onClick={apply}>
-            <Search size={17} />
-            <span>{selectedCount ? `Применить (${selectedCount})` : 'Применить'}</span>
+      ) : <div className="filter-empty-state">Выберите группу слева и отметьте нужные значения.</div>;
+    }
+    if (activeGroup.type === 'range') {
+      return (
+        <div className="dns-range-panel">
+          <div className="price-row">
+            <input inputMode="numeric" placeholder={`от ${activeGroup.min ?? ''}`} value={draft.minPrice || ''} onChange={(event) => setDraft({ ...draft, minPrice: event.target.value })} />
+            <input inputMode="numeric" placeholder={`до ${activeGroup.max ?? ''}`} value={draft.maxPrice || ''} onChange={(event) => setDraft({ ...draft, maxPrice: event.target.value })} />
+          </div>
+          <div className="dns-range-scale">
+            <span>{activeGroup.min ? `${activeGroup.min} ₽` : 'от'}</span>
+            <i />
+            <span>{activeGroup.max ? `${activeGroup.max} ₽` : 'до'}</span>
+          </div>
+        </div>
+      );
+    }
+    if (!optionsForActiveGroup.length) {
+      return <div className="filter-empty-state">Ничего не найдено по этому фильтру.</div>;
+    }
+    return (
+      <div className="dns-option-list">
+        {optionsForActiveGroup.map((option) => {
+          const selected = activeGroup.key === 'availability'
+            ? (option.value === 'available' && draft.availability === 'true') || (option.value === 'on_order' && draft.availability === 'false')
+            : (draft.params?.[activeGroup.paramName || activeGroup.key.slice(6)] || []).includes(option.value);
+          return (
+            <button key={option.value} className={selected ? 'selected' : ''} onClick={() => toggleGroupOption(activeGroup, option)}>
+              <span className="dns-checkbox" />
+              <span className="dns-option-label">{option.label}</span>
+              <small>{option.count}</small>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <section className="dns-filter-screen" role="dialog" aria-modal="true" aria-label="Фильтры">
+      <header className="dns-filter-head">
+        <div>
+          <h1>Фильтры</h1>
+          <p>{activeGroup.key === 'all' ? 'Выберите группу слева, значение справа' : activeGroup.label}</p>
+        </div>
+        <div className="filters-sheet__head-actions">
+          <button className="filters-reset-btn" onClick={reset}>Сбросить</button>
+          <button className="filters-close-btn" onClick={onClose} aria-label="Закрыть фильтры"><X size={21} /></button>
+        </div>
+      </header>
+      <label className="dns-filter-search">
+        <Search size={17} />
+        <input value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} placeholder={activeGroup.key === 'all' ? 'Поиск по фильтрам' : `Найти ${activeGroup.label.toLowerCase()}`} />
+      </label>
+      <div className="dns-filter-body">
+        <nav className="dns-filter-groups" aria-label="Группы фильтров">
+          <button className={activeGroupKey === 'all' ? 'active' : ''} onClick={() => setActiveGroupKey('all')}>
+            <span>Все фильтры</span>
+            {selectedCount ? <b>{selectedCount}</b> : null}
           </button>
-        </footer>
-      </aside>
-    </>
+          {visibleGroups.map((group) => {
+            const count = groupSelectedCount(group);
+            return (
+              <button key={group.key} className={activeGroup.key === group.key ? 'active' : ''} onClick={() => setActiveGroupKey(group.key)}>
+                <span>{group.label}</span>
+                {count ? <b>{count}</b> : null}
+              </button>
+            );
+          })}
+          {!visibleGroups.length && normalizedSearch ? <div className="dns-group-empty">Не найдено</div> : null}
+        </nav>
+        <section className="dns-filter-values" aria-label={activeGroup.label}>
+          {renderActivePanel()}
+        </section>
+      </div>
+      <footer className="dns-filter-actions">
+        <button className="secondary" onClick={reset}>Сбросить</button>
+        <button className="primary" onClick={apply}>{selectedCount ? `Применить (${selectedCount})` : 'Применить'}</button>
+      </footer>
+    </section>
   );
 }
 
@@ -768,6 +962,7 @@ function App() {
   const [me, setMe] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const catalogRequestRef = useRef(0);
+  const filtersOpenRef = useRef(false);
 
   const categoriesFlat = useMemo(() => flattenCategories(categories), [categories]);
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
@@ -783,6 +978,18 @@ function App() {
   useEffect(() => {
     saveCart(cart);
   }, [cart]);
+
+  useEffect(() => {
+    filtersOpenRef.current = filtersOpen;
+  }, [filtersOpen]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      if (filtersOpenRef.current) setFiltersOpen(false);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -825,11 +1032,24 @@ function App() {
 
   const cartCount = getCartItems(cart).reduce((sum, item) => sum + item.quantity, 0);
   const selectedFiltersCount = countSelectedFilters(filters);
+  const openFilters = () => {
+    if (!filtersOpenRef.current) {
+      window.history.pushState({ dvkFilters: true }, '', window.location.href);
+    }
+    setFiltersOpen(true);
+  };
+  const closeFilters = () => {
+    if (window.history.state?.dvkFilters) {
+      window.history.back();
+    } else {
+      setFiltersOpen(false);
+    }
+  };
 
   return (
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} onAdd={onAdd} cartCount={cartCount} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
@@ -838,8 +1058,8 @@ function App() {
       {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminVisitors' && <AdminGuard me={me} setView={setView}><AdminVisitorsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
-      {view === 'catalog' ? <FloatingFilterButton onClick={() => setFiltersOpen(true)} count={selectedFiltersCount} /> : null}
-      <FiltersSheet open={filtersOpen} facets={facets} filters={filters} setFilters={setFilters} onClose={() => setFiltersOpen(false)} />
+      {view === 'catalog' ? <FloatingFilterButton onClick={openFilters} count={selectedFiltersCount} /> : null}
+      <FiltersSheet open={filtersOpen} facets={facets} filters={filters} setFilters={setFilters} onClose={closeFilters} />
       {!['product', 'checkout', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
     </div>
   );
