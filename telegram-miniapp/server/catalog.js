@@ -79,6 +79,12 @@ function hasFilterValue(value) {
   return value !== undefined && value !== null && value !== '';
 }
 
+function optionalNumberFilter(value) {
+  if (!hasFilterValue(value)) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function withoutParam(filters, paramName) {
   const params = { ...(filters.params || {}) };
   delete params[paramName];
@@ -111,7 +117,8 @@ function selectedCountForAvailability(filters) {
 }
 
 function selectedCountForPrice(filters) {
-  return (hasFilterValue(filters.minPrice) ? 1 : 0) + (hasFilterValue(filters.maxPrice) ? 1 : 0);
+  return (optionalNumberFilter(filters.minPrice) !== null ? 1 : 0)
+    + (optionalNumberFilter(filters.maxPrice) !== null ? 1 : 0);
 }
 
 function mapCategoryTree(categories) {
@@ -262,12 +269,14 @@ async function loadCandidateProducts({ categoryId, search, filters }) {
   if (availabilityFilter === false) {
     where.push('p.available = FALSE');
   }
-  if (filters.minPrice !== undefined && filters.minPrice !== '') {
-    values.push(Number(filters.minPrice));
+  const minPriceFilter = optionalNumberFilter(filters.minPrice);
+  const maxPriceFilter = optionalNumberFilter(filters.maxPrice);
+  if (minPriceFilter !== null) {
+    values.push(minPriceFilter);
     where.push(`p.price >= $${values.length}`);
   }
-  if (filters.maxPrice !== undefined && filters.maxPrice !== '') {
-    values.push(Number(filters.maxPrice));
+  if (maxPriceFilter !== null) {
+    values.push(maxPriceFilter);
     where.push(`p.price <= $${values.length}`);
   }
 
@@ -412,6 +421,8 @@ function makePriceGroup(products, filters) {
     .map((product) => Number(product.price))
     .filter((price) => Number.isFinite(price));
   if (!prices.length && !selectedCountForPrice(filters)) return null;
+  const selectedMin = optionalNumberFilter(filters.minPrice);
+  const selectedMax = optionalNumberFilter(filters.maxPrice);
   return {
     key: 'price',
     label: 'Цена',
@@ -419,8 +430,8 @@ function makePriceGroup(products, filters) {
     selectedCount: selectedCountForPrice(filters),
     min: prices.length ? Math.min(...prices) : null,
     max: prices.length ? Math.max(...prices) : null,
-    selectedMin: hasFilterValue(filters.minPrice) ? Number(filters.minPrice) : null,
-    selectedMax: hasFilterValue(filters.maxPrice) ? Number(filters.maxPrice) : null
+    selectedMin,
+    selectedMax
   };
 }
 
