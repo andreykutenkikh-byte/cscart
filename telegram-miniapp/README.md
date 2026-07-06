@@ -21,6 +21,14 @@ If the feed contains relative picture paths, the importer normalizes them agains
 
 User-facing catalog APIs read from the local database only. They do not fetch the YML feed and do not proxy or cache images.
 
+## Product Image Gallery
+
+Product listing responses return a single primary remote image URL for each product. Product detail responses return the full `images` array from `product_images`, ordered by `sort_order` and then `id`, with exact duplicate remote URLs removed from the response.
+
+The mobile frontend renders product cards, cart images, product detail images, thumbnails, and the full-screen image viewer with `object-fit: contain`. This keeps ceramic tile, mosaic, packaging, and interior photos fully visible instead of cropping them. Thumbnail strips are horizontally scrollable and do not create body-level horizontal overflow.
+
+The full-screen image viewer is a client-only viewer for the existing remote URLs. It does not download, proxy, cache, resize, generate thumbnails, write files, or convert images to base64. Browser or Telegram WebView loads the original remote URLs directly from the parent DV Keramik server.
+
 ## DNS-Style Catalog Filters
 
 The mobile catalog uses a DNS-style full-screen filter interface for large ceramic facet sets. The UI opens from the floating filter button, keeps edits in a draft state, and applies them only after the user taps `Применить`.

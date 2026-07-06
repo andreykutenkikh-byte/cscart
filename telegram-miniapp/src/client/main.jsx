@@ -610,22 +610,67 @@ function FiltersSheet({ open, facets, filters, setFilters, onClose }) {
 function ProductGallery({ product }) {
   const images = useMemo(() => getProductImages(product), [product]);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const touchStartRef = useRef(null);
+  const stageSwipedRef = useRef(false);
+  const thumbRefs = useRef([]);
   const activeImage = images[activeIndex];
   const hasManyImages = images.length > 1;
 
   useEffect(() => {
     setActiveIndex(0);
+    setViewerOpen(false);
   }, [product?.id, product?.externalId, images.length]);
+
+  useEffect(() => {
+    if (activeIndex > images.length - 1) {
+      setActiveIndex(Math.max(0, images.length - 1));
+    }
+  }, [activeIndex, images.length]);
+
+  useEffect(() => {
+    thumbRefs.current[activeIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeIndex]);
 
   const goToImage = (direction) => {
     if (!images.length) return;
     setActiveIndex((current) => (current + direction + images.length) % images.length);
   };
 
+  const handleTouchStart = (event) => {
+    const touch = event.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event) => {
+    if (!hasManyImages || !touchStartRef.current) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    stageSwipedRef.current = true;
+    window.setTimeout(() => {
+      stageSwipedRef.current = false;
+    }, 300);
+    goToImage(deltaX < 0 ? 1 : -1);
+  };
+
   return (
     <section className="detail-gallery" aria-label="Фотографии товара">
-      <div className="detail-image detail-gallery__stage">
-        <ProductImage src={activeImage?.remoteUrl} alt={product.name} />
+      <div className="detail-gallery__frame">
+        <button
+          type="button"
+          className="detail-image detail-gallery__stage"
+          onClick={() => {
+            if (images.length && !stageSwipedRef.current) setViewerOpen(true);
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          aria-label="Открыть фото на весь экран"
+        >
+          <ProductImage src={activeImage?.remoteUrl} alt={product.name} />
+        </button>
         {hasManyImages ? (
           <>
             <button className="detail-gallery__nav prev" onClick={() => goToImage(-1)} aria-label="Предыдущее фото">
@@ -638,16 +683,111 @@ function ProductGallery({ product }) {
           </>
         ) : null}
       </div>
+      {!hasManyImages && images.length ? <span className="detail-gallery__single-counter">1/1</span> : null}
       {hasManyImages ? (
         <div className="detail-thumbs" aria-label="Миниатюры товара">
           {images.map((image, index) => (
             <button
               key={image.id}
+              ref={(node) => {
+                thumbRefs.current[index] = node;
+              }}
               className={index === activeIndex ? 'detail-thumb selected' : 'detail-thumb'}
               onClick={() => setActiveIndex(index)}
               aria-label={`Фото ${index + 1}`}
             >
               <ProductImage src={image.remoteUrl} alt={`${product.name} ${index + 1}`} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {viewerOpen ? (
+        <ImageViewer
+          images={images}
+          activeIndex={activeIndex}
+          setActiveIndex={setActiveIndex}
+          onClose={() => setViewerOpen(false)}
+          productName={product.name}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName }) {
+  const touchStartRef = useRef(null);
+  const activeImage = images[activeIndex];
+  const hasManyImages = images.length > 1;
+
+  const goToImage = (direction) => {
+    if (!images.length) return;
+    setActiveIndex((current) => (current + direction + images.length) % images.length);
+  };
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowRight') goToImage(1);
+      if (event.key === 'ArrowLeft') goToImage(-1);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [images.length, onClose]);
+
+  const handleTouchStart = (event) => {
+    const touch = event.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (event) => {
+    if (!hasManyImages || !touchStartRef.current) return;
+    const touch = event.changedTouches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    touchStartRef.current = null;
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    goToImage(deltaX < 0 ? 1 : -1);
+  };
+
+  if (!images.length) return null;
+
+  return (
+    <section className="image-viewer" role="dialog" aria-modal="true" aria-label="Просмотр фото">
+      <header className="image-viewer__header">
+        <span>{activeIndex + 1}/{images.length}</span>
+        <button type="button" onClick={onClose} aria-label="Закрыть просмотр фото"><X size={24} /></button>
+      </header>
+      <div className="image-viewer__body" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+        {hasManyImages ? (
+          <button className="image-viewer__nav prev" type="button" onClick={() => goToImage(-1)} aria-label="Предыдущее фото">
+            <ChevronLeft size={28} />
+          </button>
+        ) : null}
+        <div className="image-viewer__stage">
+          <ProductImage src={activeImage?.remoteUrl} alt={`${productName} ${activeIndex + 1}`} />
+        </div>
+        {hasManyImages ? (
+          <button className="image-viewer__nav next" type="button" onClick={() => goToImage(1)} aria-label="Следующее фото">
+            <ChevronRight size={28} />
+          </button>
+        ) : null}
+      </div>
+      {hasManyImages ? (
+        <div className="image-viewer__thumbs" aria-label="Миниатюры в просмотрщике">
+          {images.map((image, index) => (
+            <button
+              key={image.id}
+              type="button"
+              className={index === activeIndex ? 'selected' : ''}
+              onClick={() => setActiveIndex(index)}
+              aria-label={`Показать фото ${index + 1}`}
+            >
+              <ProductImage src={image.remoteUrl} alt={`${productName} ${index + 1}`} />
             </button>
           ))}
         </div>
