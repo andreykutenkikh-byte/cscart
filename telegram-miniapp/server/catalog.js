@@ -252,6 +252,15 @@ function summarizeProduct(row) {
   };
 }
 
+function uniqueImageRows(images) {
+  const seen = new Set();
+  return images.filter((image) => {
+    if (!image.remote_url || seen.has(image.remote_url)) return false;
+    seen.add(image.remote_url);
+    return true;
+  });
+}
+
 async function loadCandidateProducts({ categoryId, search, filters }) {
   const categories = await getCategoryRows();
   const categoryIds = getDescendantCategoryIds(categories, categoryId);
@@ -352,12 +361,12 @@ export async function getProductDetail(id) {
   const product = result.rows[0];
   if (!product) return null;
 
-  const images = (await query(`
+  const images = uniqueImageRows((await query(`
     SELECT id, remote_url, sort_order
     FROM product_images
     WHERE product_id = $1
     ORDER BY sort_order, id
-  `, [product.id])).rows;
+  `, [product.id])).rows);
   const categories = await getCategoryRows();
 
   return {
