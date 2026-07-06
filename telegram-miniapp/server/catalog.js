@@ -16,15 +16,109 @@ function asArray(value) {
   return Array.isArray(value) ? value : [value];
 }
 
-export function parseCatalogFilters(rawFilters) {
-  if (!rawFilters) return { params: {} };
-  if (typeof rawFilters === 'object') return { params: rawFilters.params || {}, ...rawFilters };
-  try {
-    const parsed = JSON.parse(rawFilters);
-    return { params: parsed.params || {}, ...parsed };
-  } catch {
-    return { params: {} };
+function splitFilterValues(value) {
+  return asArray(value)
+    .flatMap((item) => String(item).split(','))
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeFilterShape(filters = {}) {
+  return {
+    ...filters,
+    params: Object.fromEntries(
+      Object.entries(filters.params || {})
+        .map(([name, values]) => [name, splitFilterValues(values)])
+        .filter(([, values]) => values.length)
+    )
+  };
+}
+
+export function parseCatalogFilters(rawFilters, queryParams = {}) {
+  let filters = { params: {} };
+  if (rawFilters && typeof rawFilters === 'object') {
+    filters = { params: rawFilters.params || {}, ...rawFilters };
+  } else if (rawFilters) {
+    try {
+      const parsed = JSON.parse(rawFilters);
+      filters = { params: parsed.params || {}, ...parsed };
+    } catch {
+      filters = { params: {} };
+    }
   }
+
+  if (queryParams.available !== undefined) filters.availability = queryParams.available;
+  if (queryParams.availability !== undefined) filters.availability = queryParams.availability;
+  if (queryParams.priceMin !== undefined) filters.minPrice = queryParams.priceMin;
+  if (queryParams.priceMax !== undefined) filters.maxPrice = queryParams.priceMax;
+  if (queryParams.minPrice !== undefined) filters.minPrice = queryParams.minPrice;
+  if (queryParams.maxPrice !== undefined) filters.maxPrice = queryParams.maxPrice;
+
+  for (const [key, value] of Object.entries(queryParams)) {
+    const filterParamMatch = key.match(/^filters\[(param:.+)\]$/);
+    const directParamMatch = key.match(/^param:(.+)$/);
+    const paramsMatch = key.match(/^params\[(.+)\]$/);
+    const paramName = filterParamMatch?.[1]?.slice('param:'.length)
+      || directParamMatch?.[1]
+      || paramsMatch?.[1];
+    if (paramName) {
+      filters.params = { ...(filters.params || {}), [paramName]: splitFilterValues(value) };
+    }
+  }
+
+  return normalizeFilterShape(filters);
+}
+
+function getAvailabilityFilter(value) {
+  if (value === true || value === 'true' || value === 'available') return true;
+  if (value === false || value === 'false' || value === 'on_order' || value === 'unavailable') return false;
+  return null;
+}
+
+function hasFilterValue(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function optionalNumberFilter(value) {
+  if (!hasFilterValue(value)) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function withoutParam(filters, paramName) {
+  const params = { ...(filters.params || {}) };
+  delete params[paramName];
+  return { ...filters, params };
+}
+
+function withoutFilterKeys(filters, keys) {
+  const result = { ...filters, params: { ...(filters.params || {}) } };
+  for (const key of keys) delete result[key];
+  return result;
+}
+
+function selectedValuesForParam(filters, paramName) {
+  return splitFilterValues(filters.params?.[paramName]);
+}
+
+function selectedCountForFilters(filters = {}) {
+  return Object.values(filters.params || {}).reduce((sum, values) => sum + splitFilterValues(values).length, 0)
+    + (hasFilterValue(filters.availability) ? 1 : 0)
+    + (hasFilterValue(filters.minPrice) ? 1 : 0)
+    + (hasFilterValue(filters.maxPrice) ? 1 : 0);
+}
+
+function selectedCountForParam(filters, paramName) {
+  return selectedValuesForParam(filters, paramName).length;
+}
+
+function selectedCountForAvailability(filters) {
+  return hasFilterValue(filters.availability) ? 1 : 0;
+}
+
+function selectedCountForPrice(filters) {
+  return (optionalNumberFilter(filters.minPrice) !== null ? 1 : 0)
+    + (optionalNumberFilter(filters.maxPrice) !== null ? 1 : 0);
 }
 
 function mapCategoryTree(categories) {
@@ -168,18 +262,21 @@ async function loadCandidateProducts({ categoryId, search, filters }) {
     values.push(categoryIds);
     where.push(`p.category_external_id = ANY($${values.length}::text[])`);
   }
-  if (filters.availability === true || filters.availability === 'true') {
+  const availabilityFilter = getAvailabilityFilter(filters.availability);
+  if (availabilityFilter === true) {
     where.push('p.available = TRUE');
   }
-  if (filters.availability === false || filters.availability === 'false') {
+  if (availabilityFilter === false) {
     where.push('p.available = FALSE');
   }
-  if (filters.minPrice !== undefined && filters.minPrice !== '') {
-    values.push(Number(filters.minPrice));
+  const minPriceFilter = optionalNumberFilter(filters.minPrice);
+  const maxPriceFilter = optionalNumberFilter(filters.maxPrice);
+  if (minPriceFilter !== null) {
+    values.push(minPriceFilter);
     where.push(`p.price >= $${values.length}`);
   }
-  if (filters.maxPrice !== undefined && filters.maxPrice !== '') {
-    values.push(Number(filters.maxPrice));
+  if (maxPriceFilter !== null) {
+    values.push(maxPriceFilter);
     where.push(`p.price <= $${values.length}`);
   }
 
@@ -204,7 +301,7 @@ async function loadCandidateProducts({ categoryId, search, filters }) {
 }
 
 export async function getProducts(params) {
-  const filters = parseCatalogFilters(params.filters);
+  const filters = parseCatalogFilters(params.filters, params);
   const page = Math.max(1, toNumber(params.page, 1));
   const limit = Math.min(PAGE_LIMIT_MAX, Math.max(1, toNumber(params.limit, 24)));
   const products = await loadCandidateProducts({
@@ -286,29 +383,93 @@ function addCount(map, key) {
   map.set(key, (map.get(key) || 0) + 1);
 }
 
-export async function getFacets(params) {
-  const filters = parseCatalogFilters(params.filters);
-  const products = await loadCandidateProducts({
-    categoryId: params.categoryId,
-    search: params.search,
-    filters: { ...filters, params: {} }
-  });
+function groupSortRank(name) {
+  const normalized = normalizeText(name);
+  if (/размер|format|size/.test(normalized)) return 10;
+  if (/толщин/.test(normalized)) return 20;
+  if (/цвет мозаик/.test(normalized)) return 30;
+  if (/цвет|color/.test(normalized)) return 40;
+  if (/поверх|finish|surface|фактур|матов|глянц|полир/.test(normalized)) return 50;
+  if (/коллекц|collection|серия/.test(normalized)) return 60;
+  if (/vendor|бренд|brand|производител|manufacturer/.test(normalized)) return 70;
+  if (/страна|country/.test(normalized)) return 80;
+  return 100;
+}
 
-  const categoryCounts = new Map();
-  const availabilityCounts = { available: 0, unavailable: 0 };
-  const paramCounts = new Map();
-  let minPrice = null;
-  let maxPrice = null;
+function makeAvailabilityGroup(products, filters) {
+  const availableCount = products.filter((product) => product.available).length;
+  const unavailableCount = products.length - availableCount;
+  const selected = getAvailabilityFilter(filters.availability);
+  const options = [
+    { value: 'available', label: 'В наличии', count: availableCount, selected: selected === true },
+    { value: 'on_order', label: 'Под заказ', count: unavailableCount, selected: selected === false }
+  ].filter((option) => option.count > 0 || option.selected);
 
-  for (const product of products) {
-    addCount(categoryCounts, product.category_external_id);
-    if (product.available) availabilityCounts.available += 1;
-    else availabilityCounts.unavailable += 1;
-    if (product.price !== null) {
-      const price = Number(product.price);
-      minPrice = minPrice === null ? price : Math.min(minPrice, price);
-      maxPrice = maxPrice === null ? price : Math.max(maxPrice, price);
+  if (!options.length) return null;
+  return {
+    key: 'availability',
+    label: 'Наличие',
+    type: 'checkbox',
+    selectedCount: selectedCountForAvailability(filters),
+    totalOptions: options.length,
+    options
+  };
+}
+
+function makePriceGroup(products, filters) {
+  const prices = products
+    .map((product) => Number(product.price))
+    .filter((price) => Number.isFinite(price));
+  if (!prices.length && !selectedCountForPrice(filters)) return null;
+  const selectedMin = optionalNumberFilter(filters.minPrice);
+  const selectedMax = optionalNumberFilter(filters.maxPrice);
+  return {
+    key: 'price',
+    label: 'Цена',
+    type: 'range',
+    selectedCount: selectedCountForPrice(filters),
+    min: prices.length ? Math.min(...prices) : null,
+    max: prices.length ? Math.max(...prices) : null,
+    selectedMin,
+    selectedMax
+  };
+}
+
+function makeParamGroup(name, valueCounts, filters) {
+  const selectedValues = new Set(selectedValuesForParam(filters, name));
+  const optionsByValue = new Map(
+    [...valueCounts.entries()].map(([value, count]) => [
+      value,
+      { value, label: value, count, selected: selectedValues.has(value) }
+    ])
+  );
+
+  for (const value of selectedValues) {
+    if (!optionsByValue.has(value)) {
+      optionsByValue.set(value, { value, label: value, count: 0, selected: true });
     }
+  }
+
+  const options = [...optionsByValue.values()]
+    .filter((option) => option.count > 0 || option.selected)
+    .sort((a, b) => Number(b.selected) - Number(a.selected) || b.count - a.count || a.label.localeCompare(b.label, 'ru'));
+
+  if (!options.length) return null;
+  return {
+    key: `param:${name}`,
+    paramName: name,
+    label: name,
+    group: classifyParam(name),
+    type: 'checkbox',
+    selectedCount: selectedCountForParam(filters, name),
+    totalOptions: options.length,
+    options
+  };
+}
+
+function countParamValues(products) {
+  const paramCounts = new Map();
+  for (const product of products) {
     for (const [name, rawValue] of Object.entries(product.params_json || {})) {
       const values = asArray(rawValue).map(String).map((value) => value.trim()).filter(Boolean);
       if (!values.length) continue;
@@ -317,9 +478,92 @@ export async function getFacets(params) {
       for (const value of values) addCount(valueCounts, value);
     }
   }
+  return paramCounts;
+}
+
+function countValuesForParam(products, paramName) {
+  const valueCounts = new Map();
+  for (const product of products) {
+    const values = asArray(product.params_json?.[paramName]).map(String).map((value) => value.trim()).filter(Boolean);
+    for (const value of values) addCount(valueCounts, value);
+  }
+  return valueCounts;
+}
+
+export async function getFacets(params) {
+  const filters = parseCatalogFilters(params.filters, params);
+  const products = await loadCandidateProducts({
+    categoryId: params.categoryId,
+    search: params.search,
+    filters: { ...filters, params: {} }
+  });
+  const appliedProducts = products.filter((product) => productMatchesParams(product, filters.params));
+  let availabilityProducts = appliedProducts;
+  let priceProducts = appliedProducts;
+
+  const categoryCounts = new Map();
+  if (hasFilterValue(filters.availability)) {
+    const baseProductsWithoutAvailability = await loadCandidateProducts({
+      categoryId: params.categoryId,
+      search: params.search,
+      filters: { ...withoutFilterKeys(filters, ['availability']), params: {} }
+    });
+    availabilityProducts = baseProductsWithoutAvailability.filter((product) => productMatchesParams(product, filters.params));
+  }
+  if (hasFilterValue(filters.minPrice) || hasFilterValue(filters.maxPrice)) {
+    const baseProductsWithoutPrice = await loadCandidateProducts({
+      categoryId: params.categoryId,
+      search: params.search,
+      filters: { ...withoutFilterKeys(filters, ['minPrice', 'maxPrice']), params: {} }
+    });
+    priceProducts = baseProductsWithoutPrice.filter((product) => productMatchesParams(product, filters.params));
+  }
+  let minPrice = null;
+  let maxPrice = null;
+
+  for (const product of products) {
+    addCount(categoryCounts, product.category_external_id);
+    if (product.price !== null) {
+      const price = Number(product.price);
+      minPrice = minPrice === null ? price : Math.min(minPrice, price);
+      maxPrice = maxPrice === null ? price : Math.max(maxPrice, price);
+    }
+  }
 
   const categories = await getCategoryRows();
   const categoryById = new Map(categories.map((category) => [category.external_id, category]));
+  const baseParamCounts = countParamValues(products);
+  const hasSelectedParams = Object.keys(filters.params || {}).length > 0;
+  const allParamNames = new Set([
+    ...Object.keys(filters.params || {}),
+    ...products.flatMap((product) => Object.keys(product.params_json || {}))
+  ]);
+  const paramGroupEntries = [...allParamNames]
+    .map((name) => {
+      const valueCounts = hasSelectedParams
+        ? countValuesForParam(products.filter((product) => productMatchesParams(product, withoutParam(filters, name).params)), name)
+        : baseParamCounts.get(name);
+      return makeParamGroup(name, valueCounts || new Map(), filters);
+    })
+    .filter(Boolean)
+    .filter((group) => group.options.length > 1 || group.selectedCount > 0)
+    .sort((a, b) => groupSortRank(a.label) - groupSortRank(b.label)
+      || b.totalOptions - a.totalOptions
+      || a.label.localeCompare(b.label, 'ru'));
+
+  const availabilityGroup = makeAvailabilityGroup(availabilityProducts, filters);
+  const priceGroup = makePriceGroup(priceProducts, filters);
+  const groups = [
+    availabilityGroup,
+    priceGroup,
+    ...paramGroupEntries
+  ].filter(Boolean);
+
+  const availabilityCounts = {
+    available: availabilityGroup?.options.find((option) => option.value === 'available')?.count || 0,
+    unavailable: availabilityGroup?.options.find((option) => option.value === 'on_order')?.count || 0
+  };
+  const paramCounts = baseParamCounts;
   const paramFacets = [...paramCounts.entries()]
     .map(([name, counts]) => {
       const values = [...counts.entries()]
@@ -344,6 +588,9 @@ export async function getFacets(params) {
     .filter((facet, index) => facet.group !== 'other' || index < 12);
 
   return {
+    total: appliedProducts.length,
+    selectedCount: selectedCountForFilters(filters),
+    groups,
     category: [...categoryCounts.entries()]
       .map(([externalId, count]) => ({
         externalId,

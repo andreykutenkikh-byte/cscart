@@ -21,6 +21,74 @@ If the feed contains relative picture paths, the importer normalizes them agains
 
 User-facing catalog APIs read from the local database only. They do not fetch the YML feed and do not proxy or cache images.
 
+## DNS-Style Catalog Filters
+
+The mobile catalog uses a DNS-style full-screen filter interface for large ceramic facet sets. The UI opens from the floating filter button, keeps edits in a draft state, and applies them only after the user taps `Применить`.
+
+Filter groups and option values are generated from imported PostgreSQL catalog data:
+
+- `products.available` for availability.
+- `products.price` for the price range.
+- `products.params_json` for material size, thickness, color, surface, collection, vendor, country, and any other imported YML params.
+
+No frontend filter group or option value is hardcoded. The API may apply display-order preferences for known Russian param names, but unknown imported params are still returned as filter groups.
+
+`GET /api/catalog/facets` returns the legacy fields used by the home/catalog quick UI and a DNS-ready shape:
+
+```json
+{
+  "facets": {
+    "total": 193,
+    "selectedCount": 2,
+    "groups": [
+      {
+        "key": "availability",
+        "label": "Наличие",
+        "type": "checkbox",
+        "selectedCount": 1,
+        "totalOptions": 2,
+        "options": [
+          { "value": "available", "label": "В наличии", "count": 189, "selected": true }
+        ]
+      },
+      {
+        "key": "price",
+        "label": "Цена",
+        "type": "range",
+        "min": 10,
+        "max": 123562,
+        "selectedMin": null,
+        "selectedMax": null
+      },
+      {
+        "key": "param:Размер материала",
+        "paramName": "Размер материала",
+        "label": "Размер материала",
+        "type": "checkbox",
+        "selectedCount": 1,
+        "options": [
+          { "value": "600*1200", "label": "600*1200", "count": 189, "selected": true }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Catalog APIs support the existing JSON query style:
+
+```bash
+curl 'http://localhost:3001/api/catalog/products?filters={"availability":"true","minPrice":"1000","params":{"Размер материала":["600*1200","600х600"]}}'
+```
+
+They also accept explicit query aliases for smoke checks and integrations:
+
+```bash
+curl 'http://localhost:3001/api/catalog/products?available=true&priceMin=1000&priceMax=5000&filters[param:Размер материала]=600*1200,600х600'
+```
+
+Multiple values inside the same param group behave as OR. Different groups, availability, price, category, and search behave as AND. Facet counts are computed from local PostgreSQL data in the API process. For MVP performance, counts are exact within the current category/search/price/availability context and account for other selected param groups when computing each param group.
+
 ## Environment
 
 Copy `.env.example` to `.env` and adjust values:
@@ -142,4 +210,4 @@ The frontend loads `https://telegram.org/js/telegram-web-app.js`. When opened in
 - MAX is a stub adapter only.
 - Pagination is page-based, not infinite scroll.
 - Facets are generated from imported local product data and computed in the API process for MVP simplicity.
-- The UI follows the supplied Mini App direction from the brief; exact Figma extraction was not available in this codebase.
+- DNS-style filter counts are calculated in memory from the already-loaded local DB product set; this is suitable for the current MVP catalog size and should be revisited if the catalog grows substantially.

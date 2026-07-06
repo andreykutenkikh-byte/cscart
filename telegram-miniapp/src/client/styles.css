@@ -371,6 +371,63 @@ button {
   flex: 0 0 auto;
 }
 
+.selected-filters-panel {
+  margin: 12px 0 14px;
+}
+
+.selected-filters-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: #70645d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.selected-filters-panel__head button {
+  padding: 0;
+  background: transparent;
+  color: #b3121b;
+  font-weight: 900;
+}
+
+.selected-filter-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -24px;
+  padding: 0 24px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.selected-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.selected-filter-chips button {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #e7ded5;
+  border-radius: 16px;
+  background: #fff;
+  color: #201b18;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.selected-filter-chips span {
+  max-width: 138px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .result-row {
   margin: 6px 0 14px;
 }
@@ -735,6 +792,285 @@ button {
   justify-content: center;
   gap: 8px;
   border-radius: 14px;
+}
+
+.dns-filter-screen {
+  position: fixed;
+  inset: 0;
+  left: 50%;
+  z-index: 40;
+  display: grid;
+  width: min(100vw, 430px);
+  height: 100dvh;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: #f8f3ed;
+  box-shadow: 0 0 0 999px rgb(32 27 24 / 24%);
+  transform: translateX(-50%);
+}
+
+.dns-filter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 42px 22px 14px;
+}
+
+.dns-filter-head h1 {
+  margin: 0 0 6px;
+  color: #0d1525;
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.dns-filter-head p {
+  margin: 0;
+  color: #6c625c;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.dns-filter-search {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 16px;
+  padding: 0 14px;
+  border: 1px solid #e7ded5;
+  border-radius: 16px;
+  background: #fff;
+  color: #70645d;
+}
+
+.dns-filter-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #201b18;
+  font-size: 13px;
+}
+
+.dns-filter-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 132px minmax(0, 1fr);
+  border-top: 1px solid #eadfd4;
+  border-bottom: 1px solid #eadfd4;
+  background: #fff;
+}
+
+.dns-filter-groups {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid #eadfd4;
+  background: #f2ece5;
+}
+
+.dns-filter-groups button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 54px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 10px 14px;
+  border-bottom: 1px solid rgb(231 222 213 / 68%);
+  background: transparent;
+  color: #4d433d;
+  text-align: left;
+}
+
+.dns-filter-groups button::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  background: transparent;
+  content: "";
+}
+
+.dns-filter-groups button.active {
+  background: #fff;
+  color: #201b18;
+}
+
+.dns-filter-groups button.active::before {
+  background: #b3121b;
+}
+
+.dns-filter-groups span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dns-filter-groups b {
+  display: grid;
+  min-width: 21px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: #b3121b;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.dns-group-empty,
+.filter-empty-state {
+  padding: 18px 12px;
+  color: #70645d;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.dns-filter-values {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 18px;
+  background: #fff;
+}
+
+.dns-option-list {
+  display: grid;
+  gap: 2px;
+}
+
+.dns-option-list button {
+  display: grid;
+  min-height: 48px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f0e7df;
+  background: transparent;
+  color: #201b18;
+  text-align: left;
+}
+
+.dns-checkbox {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 2px solid #d7cec5;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.dns-option-list button.selected .dns-checkbox {
+  border-color: #b3121b;
+  background: #b3121b;
+}
+
+.dns-option-list button.selected .dns-checkbox::after {
+  width: 8px;
+  height: 5px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  content: "";
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.dns-option-label {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.dns-option-list small {
+  color: #8a7f78;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dns-range-panel {
+  display: grid;
+  gap: 18px;
+  padding-top: 8px;
+}
+
+.dns-range-scale {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #70645d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dns-range-scale i {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #b3121b, #e9d6cc);
+}
+
+.dns-selected-list {
+  display: grid;
+  gap: 10px;
+  padding: 6px 0 18px;
+}
+
+.dns-selected-list button {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #eadfd4;
+  border-radius: 16px;
+  background: #fbf8f4;
+  color: #201b18;
+  text-align: left;
+}
+
+.dns-selected-list span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dns-selected-list strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dns-selected-list small {
+  color: #70645d;
+  font-size: 11px;
+}
+
+.dns-filter-actions {
+  display: grid;
+  grid-template-columns: 0.86fr 1.14fr;
+  gap: 8px;
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 -10px 26px rgba(72, 51, 38, 0.08);
+}
+
+.dns-filter-actions .primary,
+.dns-filter-actions .secondary {
+  min-height: 48px;
 }
 
 .price-row {
@@ -1180,6 +1516,25 @@ button {
 
   .product-card__bottom strong {
     font-size: 13px;
+  }
+
+  .dns-filter-body {
+    grid-template-columns: 124px minmax(0, 1fr);
+  }
+
+  .dns-filter-head {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .dns-filter-search {
+    margin-right: 18px;
+    margin-left: 18px;
+  }
+
+  .dns-option-list button {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    gap: 7px;
   }
 
 }
