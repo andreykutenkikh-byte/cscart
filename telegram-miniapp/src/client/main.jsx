@@ -323,15 +323,17 @@ function ProductCard({ product, onOpen, onAdd }) {
   );
 }
 
-function BottomNav({ view, setView, cartCount }) {
+function BottomNav({ view, setView, cartCount, showOrders }) {
   const items = [
     ['home', 'Главная', Home],
     ['catalogMenu', 'Каталог', LayoutGrid],
-    ['cart', 'Корзина', ShoppingCart],
-    ['orders', 'Заявки', ClipboardList]
+    ['cart', 'Корзина', ShoppingCart]
   ];
+  if (showOrders) {
+    items.push(['orders', 'Заявки', ClipboardList]);
+  }
   return (
-    <nav className="bottom-nav">
+    <nav className="bottom-nav" style={{ '--nav-count': items.length }}>
       {items.map(([id, label, Icon]) => (
         <button key={id} className={view === id || (id === 'catalogMenu' && view === 'catalog') ? 'active' : ''} onClick={() => setView(id)}>
           <Icon size={20} />
@@ -1336,6 +1338,7 @@ function App() {
   };
 
   const cartCount = getCartItems(cart).reduce((sum, item) => sum + item.quantity, 0);
+  const showOrdersNav = platform.name === 'telegram' && Boolean(me?.isAdmin);
   const selectedFiltersCount = countSelectedFilters(filters);
   const openFilters = () => {
     if (!filtersOpenRef.current) {
@@ -1366,7 +1369,7 @@ function App() {
       {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'catalog' ? <FloatingFilterButton onClick={openFilters} count={selectedFiltersCount} /> : null}
       <FiltersSheet open={filtersOpen} facets={facets} filters={filters} setFilters={setFilters} onClose={closeFilters} />
-      {!['product', 'checkout', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders'].includes(view) ? <BottomNav view={view} setView={setView} cartCount={cartCount} /> : null}
+      <BottomNav view={view} setView={setView} cartCount={cartCount} showOrders={showOrdersNav} />
     </div>
   );
 }
