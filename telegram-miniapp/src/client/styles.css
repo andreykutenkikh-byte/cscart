@@ -1747,7 +1747,7 @@ button {
   left: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--nav-count, 3), 1fr);
   max-width: 430px;
   margin: 0 auto;
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
