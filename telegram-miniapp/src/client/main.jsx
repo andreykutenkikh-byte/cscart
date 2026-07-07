@@ -319,7 +319,7 @@ function AppHeader({ cartCount = 0, setView }) {
   );
 }
 
-function ProductCard({ product, onOpen, onAdd }) {
+function ProductCard({ product, onOpen }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   return (
@@ -336,7 +336,6 @@ function ProductCard({ product, onOpen, onAdd }) {
           </div>
         </div>
       </button>
-      <button className="icon-button product-card__add" type="button" onClick={() => onAdd(product)}>+</button>
     </article>
   );
 }
@@ -363,7 +362,7 @@ function BottomNav({ view, setView, cartCount, showOrders }) {
   );
 }
 
-function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, onAdd, cartCount }) {
+function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, cartCount }) {
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
   const visibleProducts = products.filter(Boolean);
@@ -425,14 +424,14 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
       <section>
         <div className="section-title"><h2>Популярное из offers</h2><button onClick={() => setView('catalog')}>Все</button></div>
         <div className="product-list">
-          {visibleProducts.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
+          {visibleProducts.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />)}
         </div>
       </section>
     </main>
   );
 }
 
-function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, filters, setFilters, search, setSearch, setView, onOpen, onAdd, loading, cartCount }) {
+function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, filters, setFilters, search, setSearch, setView, onOpen, loading, cartCount }) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
   const selectedFilterItems = getSelectedFilterItems(filters, facets);
@@ -479,7 +478,7 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
       {loading ? <div className="empty">Загружаем каталог...</div> : null}
       {!loading && !visibleProducts.length ? <div className="empty">Ничего не найдено</div> : null}
       <div className="product-list">
-        {visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
+        {visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />)}
       </div>
       {pagination?.hasNextPage ? <div className="empty">Показана первая страница. Уточните поиск или фильтры.</div> : null}
     </main>
@@ -1384,9 +1383,9 @@ function App() {
 
   return (
     <div className="app-shell">
-      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} onAdd={onAdd} cartCount={cartCount} />}
+      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} loading={loading} cartCount={cartCount} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
