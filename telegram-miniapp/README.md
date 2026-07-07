@@ -29,6 +29,12 @@ The mobile frontend renders product cards, cart images, product detail images, t
 
 The full-screen image viewer is a client-only viewer for the existing remote URLs. It does not download, proxy, cache, resize, generate thumbnails, write files, or convert images to base64. Browser or Telegram WebView loads the original remote URLs directly from the parent DV Keramik server.
 
+## Clean White UI
+
+The Mini App uses a clean white catalog UI: the main page background is `#FFFFFF`, product/card surfaces are white, secondary image/input surfaces use soft neutral gray, and red is reserved for primary actions and active states. Product cards, cart images, product detail images, thumbnails, and the viewer use `object-fit: contain` so remote catalog images stay fully visible.
+
+Imported product text is not mutated in PostgreSQL or during import. The frontend may apply display-only title formatting to calm obviously all-caps Russian product names while preserving source data, SKU/model codes, dimensions, and remote image URL references.
+
 ## DNS-Style Catalog Filters
 
 The mobile catalog uses a DNS-style full-screen filter interface for large ceramic facet sets. The UI opens from the floating filter button, keeps edits in a draft state, and applies them only after the user taps `Применить`.
