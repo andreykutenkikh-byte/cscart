@@ -24,10 +24,13 @@ services:
     environment:
       DATABASE_URL: postgres://dvkeramik:dvkeramik@db:5432/dvkeramik_miniapp
       DVKERAMIK_YML_URL: https://dvkeramik.ru/yml_get/26
+      IMAGE_CACHE_DIR: /var/cache/dvkeramik-miniapp/images
       PORT: 3001
     command: sh -c "node server/migrate.js && node server/index.js"
     ports:
       - "3001:3001"
+    volumes:
+      - dvkeramik_image_cache:/var/cache/dvkeramik-miniapp/images
     depends_on:
       db:
         condition: service_healthy
@@ -57,3 +60,4 @@ services:
 
 volumes:
   dvkeramik_pgdata:
+  dvkeramik_image_cache:
