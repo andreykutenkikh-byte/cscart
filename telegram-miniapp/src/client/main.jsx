@@ -327,7 +327,6 @@ function ProductCard({ product, onOpen, onAdd }) {
       <button className="product-card__open" type="button" onClick={() => onOpen(product)}>
         <div className="product-card__image">
           <ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} />
-          <span className={product.available ? 'product-tag stock' : 'product-tag'}>{product.available ? 'склад' : 'заказ'}</span>
         </div>
         <div className="product-card__body">
           <div className="product-card__name">{displayName}</div>
