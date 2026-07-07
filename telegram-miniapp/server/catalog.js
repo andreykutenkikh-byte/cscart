@@ -2,6 +2,7 @@ import { query } from './db.js';
 import { buildImageVariantUrls } from './media.js';
 
 const PAGE_LIMIT_MAX = 60;
+const PRODUCT_SORTS = new Set(['default', 'price_asc', 'price_desc', 'name_asc', 'availability_desc', 'newest']);
 
 function toNumber(value, fallback) {
   const number = Number(value);
@@ -10,6 +11,10 @@ function toNumber(value, fallback) {
 
 function normalizeText(value) {
   return String(value ?? '').trim().toLowerCase();
+}
+
+function normalizeSort(value) {
+  return PRODUCT_SORTS.has(value) ? value : 'default';
 }
 
 function asArray(value) {
@@ -234,6 +239,43 @@ function productMatchesSearch(product, search) {
   return haystack.includes(needle);
 }
 
+function compareName(a, b) {
+  return String(a.name || '').localeCompare(String(b.name || ''), 'ru', { sensitivity: 'base' })
+    || String(a.external_id || '').localeCompare(String(b.external_id || ''), 'ru');
+}
+
+function compareAvailability(a, b) {
+  return Number(Boolean(b.available)) - Number(Boolean(a.available));
+}
+
+function comparePrice(a, b, direction = 1) {
+  const left = Number(a.price);
+  const right = Number(b.price);
+  const leftValid = Number.isFinite(left);
+  const rightValid = Number.isFinite(right);
+  if (!leftValid && !rightValid) return 0;
+  if (!leftValid) return 1;
+  if (!rightValid) return -1;
+  return (left - right) * direction;
+}
+
+function compareImportedAt(a, b) {
+  const left = a.imported_at ? new Date(a.imported_at).getTime() : 0;
+  const right = b.imported_at ? new Date(b.imported_at).getTime() : 0;
+  return right - left;
+}
+
+function sortProducts(products, sort) {
+  return [...products].sort((a, b) => {
+    if (sort === 'price_asc') return comparePrice(a, b, 1) || compareName(a, b);
+    if (sort === 'price_desc') return comparePrice(a, b, -1) || compareName(a, b);
+    if (sort === 'name_asc') return compareName(a, b);
+    if (sort === 'availability_desc') return compareAvailability(a, b) || compareName(a, b);
+    if (sort === 'newest') return compareImportedAt(a, b) || compareName(a, b);
+    return compareAvailability(a, b) || compareName(a, b);
+  });
+}
+
 function decorateImage(image) {
   if (!image?.id || !image?.remote_url) return null;
   return {
@@ -334,22 +376,27 @@ export async function getProducts(params) {
   const filters = parseCatalogFilters(params.filters, params);
   const page = Math.max(1, toNumber(params.page, 1));
   const limit = Math.min(PAGE_LIMIT_MAX, Math.max(1, toNumber(params.limit, 24)));
-  const products = await loadCandidateProducts({
+  const sort = normalizeSort(params.sort);
+  const products = sortProducts(await loadCandidateProducts({
     categoryId: params.categoryId,
     search: params.search,
     filters
-  });
+  }), sort);
   const offset = (page - 1) * limit;
   const paged = products.slice(offset, offset + limit).map(summarizeProduct);
+  const hasNextPage = offset + limit < products.length;
 
   return {
     products: paged,
     pagination: {
       page,
       limit,
+      sort,
       total: products.length,
       totalPages: Math.max(1, Math.ceil(products.length / limit)),
-      hasNextPage: offset + limit < products.length
+      hasNextPage,
+      hasMore: hasNextPage,
+      nextPage: hasNextPage ? page + 1 : null
     }
   };
 }

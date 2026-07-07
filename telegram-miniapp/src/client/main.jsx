@@ -1,12 +1,32 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X, Plus, Minus } from 'lucide-react';
+import { Home, LayoutGrid, List as ListIcon, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X, Plus, Minus } from 'lucide-react';
 import { apiGet, apiPost } from './api.js';
 import { addToCart, clearCart, getCartItems, getCartTotal, loadCart, saveCart, updateQuantity } from './cart.js';
 import { getPlatform } from './platform/index.js';
 import './styles.css';
 
 const platform = getPlatform();
+const CATALOG_PAGE_LIMIT = 24;
+const CATALOG_VIEW_MODE_KEY = 'dvkeramik.catalog.viewMode';
+
+const SORT_OPTIONS = [
+  { value: 'default', label: 'По умолчанию' },
+  { value: 'price_asc', label: 'Сначала дешевле' },
+  { value: 'price_desc', label: 'Сначала дороже' },
+  { value: 'name_asc', label: 'По названию' },
+  { value: 'availability_desc', label: 'Сначала в наличии' },
+  { value: 'newest', label: 'Недавно обновленные' }
+];
+
+function loadCatalogViewMode() {
+  try {
+    const value = window.localStorage.getItem(CATALOG_VIEW_MODE_KEY);
+    return value === 'grid' || value === 'list' ? value : 'list';
+  } catch {
+    return 'list';
+  }
+}
 
 const MAIN_MENU_META = [
   ['2873', 'Керамическая плитка', 'Более 1500 наименований керамической плитки'],
@@ -351,12 +371,14 @@ function AppHeader({ cartCount = 0, setView }) {
   );
 }
 
-function ProductCard({ product, onOpen }) {
+function ProductCard({ product, onOpen, onAdd, viewMode = 'list' }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   const cardImageFallback = product.remoteImageUrl || product.imageUrl;
+  const modeClass = viewMode === 'grid' ? 'product-card--grid' : 'product-card--list';
+  const availabilityLabel = product.available ? 'В наличии' : 'Под заказ';
   return (
-    <article className="product-card">
+    <article className={`product-card ${modeClass}`}>
       <button className="product-card__open" type="button" onClick={() => onOpen(product)}>
         <div className="product-card__image">
           <ProductImage src={product.listImageUrl || product.thumbnailUrl || cardImageFallback} fallbackSrc={cardImageFallback} alt={product.name} />
@@ -364,11 +386,18 @@ function ProductCard({ product, onOpen }) {
         <div className="product-card__body">
           <div className="product-card__name">{displayName}</div>
           <div className="product-card__meta">{getProductMeta(product)}</div>
+          <div className={`product-card__stock ${product.available ? 'available' : ''}`}>{availabilityLabel}</div>
           <div className="product-card__bottom">
             <strong>{formatProductPrice(product)}</strong>
           </div>
         </div>
       </button>
+      {onAdd ? (
+        <button className="product-card__cart" type="button" onClick={() => onAdd(product)} aria-label={`Добавить в корзину ${product.name}`}>
+          <ShoppingCart size={15} />
+          <span>В корзину</span>
+        </button>
+      ) : null}
     </article>
   );
 }
@@ -465,20 +494,51 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
   );
 }
 
-function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pagination, facets, filters, setFilters, search, setSearch, setView, onOpen, loading, cartCount }) {
+function CatalogScreen({
+  categoriesFlat,
+  categoryId,
+  setCategoryId,
+  products,
+  pagination,
+  facets,
+  filters,
+  setFilters,
+  search,
+  setSearch,
+  setView,
+  onOpen,
+  onAdd,
+  onOpenFilters,
+  onLoadMore,
+  loading,
+  loadingMore,
+  loadError,
+  cartCount,
+  sort,
+  setSort,
+  viewMode,
+  setViewMode
+}) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
   const selectedFilterItems = getSelectedFilterItems(filters, facets);
+  const selectedFiltersCount = countSelectedFilters(filters);
   const visibleProducts = products.filter(Boolean);
+  const productListClassName = `product-list product-list--${viewMode === 'grid' ? 'grid' : 'list'}`;
 
   return (
     <main className="screen">
       <AppHeader cartCount={cartCount} setView={setView} />
-      <div className="toolbar">
+      <div className="toolbar catalog-toolbar">
         <label className="search-box compact">
           <Search size={18} />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по offers" />
         </label>
+        <button className="toolbar-filter-button" type="button" onClick={onOpenFilters}>
+          <SlidersHorizontal size={16} />
+          <span>Фильтр</span>
+          {selectedFiltersCount ? <b>{selectedFiltersCount}</b> : null}
+        </button>
       </div>
       <div className="breadcrumb">{selectedCategory ? `Каталог / ${selectedCategory.name}` : 'Каталог / все категории'}</div>
       {selectedFilterItems.length ? (
@@ -505,16 +565,65 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
           </button>
         ))}
       </div>
+      <div className="catalog-controls">
+        <label className="catalog-sort">
+          <span>Сортировка</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        <div className="view-toggle" role="group" aria-label="Вид каталога">
+          <button
+            type="button"
+            className={viewMode === 'list' ? 'active' : ''}
+            onClick={() => setViewMode('list')}
+            aria-label="Список"
+          >
+            <ListIcon size={16} />
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'grid' ? 'active' : ''}
+            onClick={() => setViewMode('grid')}
+            aria-label="Плитка"
+          >
+            <LayoutGrid size={16} />
+          </button>
+        </div>
+      </div>
       <div className="result-row">
         <h1>{selectedCategory?.name || 'Товары по фильтру'}</h1>
         <span>{pagination?.total ?? products.length} позиций</span>
       </div>
       {loading ? <div className="empty">Загружаем каталог...</div> : null}
       {!loading && !visibleProducts.length ? <div className="empty">Ничего не найдено</div> : null}
-      <div className="product-list">
-        {visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />)}
+      <div className={productListClassName}>
+        {visibleProducts.map((product) => (
+          <ProductCard
+            key={product.externalId}
+            product={product}
+            onOpen={onOpen}
+            onAdd={onAdd}
+            viewMode={viewMode}
+          />
+        ))}
       </div>
-      {pagination?.hasNextPage ? <div className="empty">Показана первая страница. Уточните поиск или фильтры.</div> : null}
+      {loadError ? (
+        <div className="load-more-state">
+          <span>{loadError}</span>
+          <button type="button" onClick={onLoadMore}>Повторить</button>
+        </div>
+      ) : null}
+      {pagination?.hasMore || pagination?.hasNextPage ? (
+        <button className="load-more-button" type="button" onClick={onLoadMore} disabled={loadingMore || loading}>
+          {loadingMore ? 'Загружаем...' : 'Показать ещё'}
+        </button>
+      ) : null}
+      {!loading && visibleProducts.length && pagination && !(pagination.hasMore || pagination.hasNextPage) ? (
+        <div className="end-note">Все товары показаны</div>
+      ) : null}
     </main>
   );
 }
@@ -1325,6 +1434,10 @@ function App() {
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({ params: {} });
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState('');
+  const [sort, setSort] = useState('default');
+  const [catalogViewMode, setCatalogViewMode] = useState(loadCatalogViewMode);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState(loadCart());
   const [me, setMe] = useState(null);
@@ -1348,6 +1461,14 @@ function App() {
   }, [cart]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(CATALOG_VIEW_MODE_KEY, catalogViewMode);
+    } catch {
+      // localStorage can be unavailable in restricted webviews.
+    }
+  }, [catalogViewMode]);
+
+  useEffect(() => {
     filtersOpenRef.current = filtersOpen;
   }, [filtersOpen]);
 
@@ -1369,7 +1490,9 @@ function App() {
     catalogRequestRef.current = requestId;
     const currentFilters = cloneFilters(filters);
     setLoading(true);
-    const query = { categoryId, search: debouncedSearch, filters: currentFilters, page: 1, limit: 24 };
+    setLoadingMore(false);
+    setLoadMoreError('');
+    const query = { categoryId, search: debouncedSearch, filters: currentFilters, page: 1, limit: CATALOG_PAGE_LIMIT, sort };
     Promise.all([
       apiGet('/api/catalog/products', query),
       apiGet('/api/catalog/facets', { categoryId, search: debouncedSearch, filters: currentFilters })
@@ -1386,7 +1509,44 @@ function App() {
     }).finally(() => {
       if (catalogRequestRef.current === requestId) setLoading(false);
     });
-  }, [categoryId, debouncedSearch, filtersKey]);
+  }, [categoryId, debouncedSearch, filtersKey, sort]);
+
+  const loadMoreProducts = async () => {
+    if (loading || loadingMore || !(pagination?.hasMore || pagination?.hasNextPage)) return;
+    const requestId = catalogRequestRef.current;
+    const nextPage = pagination.nextPage || (Number(pagination.page) || 1) + 1;
+    const currentFilters = cloneFilters(filters);
+    setLoadingMore(true);
+    setLoadMoreError('');
+    try {
+      const productData = await apiGet('/api/catalog/products', {
+        categoryId,
+        search: debouncedSearch,
+        filters: currentFilters,
+        page: nextPage,
+        limit: pagination.limit || CATALOG_PAGE_LIMIT,
+        sort
+      });
+      if (catalogRequestRef.current !== requestId) return;
+      setProducts((currentProducts) => {
+        const seen = new Set(currentProducts.map((product) => product.id || product.externalId || product.sku));
+        const additions = (productData.products || []).filter((product) => {
+          const key = product.id || product.externalId || product.sku;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        return [...currentProducts, ...additions];
+      });
+      setPagination(productData.pagination || null);
+    } catch {
+      if (catalogRequestRef.current === requestId) {
+        setLoadMoreError('Не удалось загрузить следующую страницу');
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const openProduct = async (product) => {
     const detail = await apiGet(`/api/catalog/products/${encodeURIComponent(product.externalId)}`);
@@ -1419,7 +1579,7 @@ function App() {
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} loading={loading} cartCount={cartCount} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
