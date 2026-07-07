@@ -39,6 +39,22 @@ function formatProductPrice(product) {
   return hasSquareMeterFactor(product) ? `${formatted}/м²` : formatted;
 }
 
+function formatDisplayTitle(name = '') {
+  const value = String(name || '').trim();
+  if (!value) return '';
+  const letters = value.match(/[A-Za-zА-Яа-яЁё]/g) || [];
+  const uppercaseLetters = value.match(/[A-ZА-ЯЁ]/g) || [];
+  const lowercaseLetters = value.match(/[a-zа-яё]/g) || [];
+  const looksAllCaps = letters.length >= 8 && uppercaseLetters.length > lowercaseLetters.length * 3;
+
+  if (!looksAllCaps) return value;
+
+  return value.replace(/[А-ЯЁ]{4,}/g, (word) => {
+    const lower = word.toLocaleLowerCase('ru-RU');
+    return `${lower.charAt(0).toLocaleUpperCase('ru-RU')}${lower.slice(1)}`;
+  });
+}
+
 function hasSquareMeterFactor(product) {
   return Object.entries(product?.params || {}).some(([name, rawValue]) => {
     const normalizedName = String(name).toLowerCase().replace(/\s+/g, ' ');
@@ -305,20 +321,23 @@ function AppHeader({ cartCount = 0, setView }) {
 
 function ProductCard({ product, onOpen, onAdd }) {
   if (!product) return null;
+  const displayName = formatDisplayTitle(product.name);
   return (
-    <article className="product-card" onClick={() => onOpen(product)}>
-      <div className="product-card__image">
-        <ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} />
-        <span className={product.available ? 'product-tag stock' : 'product-tag'}>{product.available ? 'склад' : 'заказ'}</span>
-      </div>
-      <div className="product-card__body">
-        <div className="product-card__name">{product.name}</div>
-        <div className="product-card__meta">{getProductMeta(product)}</div>
-        <div className="product-card__bottom">
-          <strong>{formatProductPrice(product)}</strong>
-          <button className="icon-button" onClick={(event) => { event.stopPropagation(); onAdd(product); }}>+</button>
+    <article className="product-card">
+      <button className="product-card__open" type="button" onClick={() => onOpen(product)}>
+        <div className="product-card__image">
+          <ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} />
+          <span className={product.available ? 'product-tag stock' : 'product-tag'}>{product.available ? 'склад' : 'заказ'}</span>
         </div>
-      </div>
+        <div className="product-card__body">
+          <div className="product-card__name">{displayName}</div>
+          <div className="product-card__meta">{getProductMeta(product)}</div>
+          <div className="product-card__bottom">
+            <strong>{formatProductPrice(product)}</strong>
+          </div>
+        </div>
+      </button>
+      <button className="icon-button product-card__add" type="button" onClick={() => onAdd(product)}>+</button>
     </article>
   );
 }
@@ -964,22 +983,33 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
 
 function ProductScreen({ product, setView, onAdd, cartCount }) {
   if (!product) return null;
+  const displayName = formatDisplayTitle(product.name);
   return (
-    <main className="screen">
+    <main className="screen product-screen">
       <AppHeader cartCount={cartCount} setView={setView} />
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
       <ProductGallery product={product} />
-      <h1 className="page-title">{product.name}</h1>
-      <div className="detail-price">{formatProductPrice(product)}</div>
-      <div className="detail-meta">{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</div>
+      <h1 className="page-title detail-title">{displayName}</h1>
+      <div className="detail-meta">{getProductMeta(product) || (product.breadcrumb || []).map((item) => item.name).slice(-1)[0] || 'Каталог ДВ Керамик'}</div>
+      <section className="detail-purchase">
+        <div>
+          <span>Цена</span>
+          <strong>{formatProductPrice(product)}</strong>
+          <small>{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</small>
+        </div>
+        <b className={product.available ? 'detail-stock in-stock' : 'detail-stock'}>{product.available ? 'В наличии' : 'Под заказ'}</b>
+      </section>
       {product.description ? <p className="detail-description">{product.description}</p> : null}
       {product.breadcrumb?.length ? <div className="breadcrumb">{product.breadcrumb.map((item) => item.name).join(' / ')}</div> : null}
       <section className="params">
+        <h2>Характеристики</h2>
         {Object.entries(product.params || {}).map(([name, value]) => (
           <div key={name}><span>{name}</span><b>{Array.isArray(value) ? value.join(', ') : value}</b></div>
         ))}
       </section>
-      <button className="primary full" onClick={() => onAdd(product)}>Добавить в корзину</button>
+      <div className="detail-cta">
+        <button className="primary full" onClick={() => onAdd(product)}>Добавить в корзину</button>
+      </div>
       {product.productUrl ? <a className="source-link" href={product.productUrl} target="_blank" rel="noreferrer">Открыть на сайте</a> : null}
     </main>
   );
@@ -997,7 +1027,7 @@ function CartScreen({ cart, setCart, setView, cartCount }) {
           <div className="cart-item" key={item.productExternalId}>
             <div className="cart-item__image"><ProductImage src={item.imageUrl} alt={item.name} /></div>
             <div>
-              <strong>{item.name}</strong>
+              <strong>{formatDisplayTitle(item.name)}</strong>
               <span>{formatPrice(item.price, item.currencyId)}</span>
               <div className="qty">
                 <button onClick={() => setCart(updateQuantity(cart, item.productExternalId, item.quantity - 1))}>−</button>
