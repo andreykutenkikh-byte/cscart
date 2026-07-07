@@ -327,6 +327,158 @@ button {
   color: #b3121b;
 }
 
+.catalog-menu-screen {
+  padding-bottom: 34px;
+}
+
+.catalog-menu-heading {
+  margin: 12px 0 14px;
+}
+
+.catalog-menu-heading h1 {
+  margin: 0 0 6px;
+  font-size: 23px;
+  line-height: 1.15;
+}
+
+.catalog-menu-heading p {
+  margin: 0;
+  color: #70645d;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.catalog-menu-all,
+.catalog-menu-item {
+  display: grid;
+  min-width: 0;
+  align-items: stretch;
+  border-bottom: 1px solid #efe6dd;
+  background: #fff;
+}
+
+.catalog-menu-all {
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  min-height: 60px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #e7ded5;
+  border-radius: 18px;
+  color: #201b18;
+  text-align: left;
+}
+
+.catalog-menu-all > span:not(.catalog-menu-icon) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  align-content: center;
+}
+
+.catalog-menu-all > svg {
+  align-self: center;
+  justify-self: center;
+  color: #b3121b;
+}
+
+.catalog-menu-list {
+  overflow: hidden;
+  border: 1px solid #e7ded5;
+  border-radius: 20px;
+  background: #fff;
+}
+
+.catalog-menu-list > .catalog-menu-item:last-child,
+.catalog-menu-children:last-child > .catalog-menu-item:last-child {
+  border-bottom: 0;
+}
+
+.catalog-menu-item {
+  grid-template-columns: minmax(0, 1fr) 44px;
+  min-height: 58px;
+}
+
+.catalog-menu-link,
+.catalog-menu-toggle,
+.catalog-menu-leaf {
+  min-width: 0;
+  background: transparent;
+  color: #201b18;
+}
+
+.catalog-menu-link {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px 8px 9px calc(12px + var(--level, 0) * 14px);
+  text-align: left;
+}
+
+.catalog-menu-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 11px;
+  background: #f9e8e6;
+  color: #b3121b;
+}
+
+.catalog-menu-item--level-1 .catalog-menu-icon,
+.catalog-menu-item--level-2 .catalog-menu-icon,
+.catalog-menu-item--level-3 .catalog-menu-icon,
+.catalog-menu-item--level-4 .catalog-menu-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #f3ebe4;
+  color: #70645d;
+}
+
+.catalog-menu-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.catalog-menu-copy strong,
+.catalog-menu-all strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-menu-copy small,
+.catalog-menu-all small {
+  overflow: hidden;
+  color: #70645d;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-menu-toggle,
+.catalog-menu-leaf {
+  display: grid;
+  width: 44px;
+  height: 100%;
+  place-items: center;
+  color: #b3121b;
+}
+
+.catalog-menu-leaf {
+  color: #b8aca4;
+}
+
+.catalog-menu-children {
+  background: #fbf8f4;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
