@@ -1,12 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X } from 'lucide-react';
+import { Home, LayoutGrid, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X, Plus, Minus } from 'lucide-react';
 import { apiGet, apiPost } from './api.js';
 import { addToCart, clearCart, getCartItems, getCartTotal, loadCart, saveCart, updateQuantity } from './cart.js';
 import { getPlatform } from './platform/index.js';
 import './styles.css';
 
 const platform = getPlatform();
+
+const MAIN_MENU_META = [
+  ['2873', 'Керамическая плитка', 'Более 1500 наименований керамической плитки'],
+  ['2877', 'Керамогранит', 'Высокопрочный настенный и напольный керамогранит'],
+  ['2867', 'Мозаика', 'Большой выбор декоративной мозаики'],
+  ['2895', 'Строительные смеси', 'Строительные смеси любого назначения'],
+  ['3022', 'Краска', 'Износостойкие краски для наружных и внутренних работ'],
+  ['2986', 'Мебель и сантехника', 'Мебель и сантехника для ванных комнат'],
+  ['3137', 'Современные решения', 'Инновационные материалы для тех, кто ценит дизайн'],
+  ['3212', 'Архитектурное стекло', 'Стеклоблоки и архитектурные решения']
+];
+
+const MAIN_MENU_META_BY_ID = new Map(MAIN_MENU_META.map(([externalId, title, description], index) => [
+  externalId,
+  { title, description, order: index }
+]));
+
+const HIDDEN_MENU_CATEGORY_RE = /(скид|распродаж|снижение\s+цены|архив)/i;
 
 function formatPrice(value, currency = 'RUB') {
   if (value === null || value === undefined) return 'Цена по запросу';
@@ -59,6 +77,42 @@ function getHomeCategories(categories) {
     return categories[0].children;
   }
   return categories;
+}
+
+function isHiddenMenuCategory(category) {
+  return HIDDEN_MENU_CATEGORY_RE.test(category?.name || '');
+}
+
+function pruneMenuCategory(category) {
+  if (!category || isHiddenMenuCategory(category)) return null;
+  const meta = MAIN_MENU_META_BY_ID.get(category.externalId);
+  const children = (category.children || [])
+    .map(pruneMenuCategory)
+    .filter(Boolean);
+
+  return {
+    ...category,
+    displayName: meta?.title || category.name,
+    menuDescription: meta?.description || '',
+    children
+  };
+}
+
+function getCatalogMenuCategories(categories) {
+  const roots = getHomeCategories(categories)
+    .map(pruneMenuCategory)
+    .filter(Boolean);
+  const rootsById = new Map(roots.map((category) => [category.externalId, category]));
+  const ordered = [];
+
+  for (const [externalId] of MAIN_MENU_META) {
+    const category = rootsById.get(externalId);
+    if (category) {
+      ordered.push(category);
+    }
+  }
+
+  return ordered;
 }
 
 function getCategoryCards(categories, facets) {
@@ -215,6 +269,7 @@ function initialViewFromPath() {
   if (path === '/admin/visitors') return 'adminVisitors';
   if (path === '/admin/orders') return 'adminOrders';
   if (path === '/admin') return 'admin';
+  if (path === '/catalog') return 'catalogMenu';
   return 'home';
 }
 
@@ -271,14 +326,14 @@ function ProductCard({ product, onOpen, onAdd }) {
 function BottomNav({ view, setView, cartCount }) {
   const items = [
     ['home', 'Главная', Home],
-    ['catalog', 'Каталог', LayoutGrid],
+    ['catalogMenu', 'Каталог', LayoutGrid],
     ['cart', 'Корзина', ShoppingCart],
     ['orders', 'Заявки', ClipboardList]
   ];
   return (
     <nav className="bottom-nav">
       {items.map(([id, label, Icon]) => (
-        <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
+        <button key={id} className={view === id || (id === 'catalogMenu' && view === 'catalog') ? 'active' : ''} onClick={() => setView(id)}>
           <Icon size={20} />
           <span>{label}</span>
           {id === 'cart' && cartCount > 0 ? <b>{cartCount}</b> : null}
@@ -314,7 +369,7 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
         <div>
           <h1>Каталог плитки с актуальными остатками</h1>
           <p>Категории и фильтры собираются из файла импорта.</p>
-          <button onClick={() => setView('catalog')}>В каталог</button>
+          <button onClick={() => setView('catalogMenu')}>В каталог</button>
         </div>
         <div className="hero__media">
           <ProductImage src={featuredProduct?.remoteImageUrl || featuredProduct?.imageUrl} alt={featuredProduct?.name || 'Плитка'} />
@@ -407,6 +462,116 @@ function CatalogScreen({ categoriesFlat, categoryId, setCategoryId, products, pa
         {visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} onAdd={onAdd} />)}
       </div>
       {pagination?.hasNextPage ? <div className="empty">Показана первая страница. Уточните поиск или фильтры.</div> : null}
+    </main>
+  );
+}
+
+function CatalogMenuItem({ category, level, expanded, onToggle, onOpen }) {
+  const hasChildren = Boolean(category.children?.length);
+  const isExpanded = expanded.has(category.externalId);
+  const depth = Math.min(level, 4);
+
+  return (
+    <>
+      <div className={`catalog-menu-item catalog-menu-item--level-${depth}`} style={{ '--level': depth }}>
+        <button className="catalog-menu-link" type="button" onClick={() => onOpen(category)}>
+          <span className="catalog-menu-icon" aria-hidden="true"><LayoutGrid size={level ? 14 : 17} /></span>
+          <span className="catalog-menu-copy">
+            <strong>{category.displayName || category.name}</strong>
+            <small>
+              {category.menuDescription || (hasChildren ? `${category.children.length} разделов` : 'Открыть категорию')}
+            </small>
+          </span>
+        </button>
+        {hasChildren ? (
+          <button
+            className="catalog-menu-toggle"
+            type="button"
+            onClick={() => onToggle(category.externalId)}
+            aria-label={`${isExpanded ? 'Свернуть' : 'Раскрыть'} ${category.displayName || category.name}`}
+          >
+            {isExpanded ? <Minus size={18} /> : <Plus size={18} />}
+          </button>
+        ) : (
+          <span className="catalog-menu-leaf" aria-hidden="true"><ChevronRight size={18} /></span>
+        )}
+      </div>
+      {hasChildren && isExpanded ? (
+        <div className="catalog-menu-children">
+          {category.children.map((child) => (
+            <CatalogMenuItem
+              key={child.externalId}
+              category={child}
+              level={level + 1}
+              expanded={expanded}
+              onToggle={onToggle}
+              onOpen={onOpen}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function CatalogMenuScreen({ categories, setCategoryId, setFilters, setSearch, setView, cartCount }) {
+  const menuCategories = useMemo(() => getCatalogMenuCategories(categories), [categories]);
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const openCategory = (category) => {
+    setCategoryId(category.externalId);
+    setFilters({ params: {} });
+    setSearch('');
+    setView('catalog');
+  };
+
+  const openAllProducts = () => {
+    setCategoryId('');
+    setFilters({ params: {} });
+    setSearch('');
+    setView('catalog');
+  };
+
+  const toggleCategory = (externalId) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(externalId)) {
+        next.delete(externalId);
+      } else {
+        next.add(externalId);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <main className="screen catalog-menu-screen">
+      <AppHeader cartCount={cartCount} setView={setView} />
+      <div className="breadcrumb">ДВ Керамик / Каталог товаров</div>
+      <section className="catalog-menu-heading">
+        <h1>Каталог товаров</h1>
+        <p>Разделы сгруппированы по структуре основного сайта.</p>
+      </section>
+      <button className="catalog-menu-all" type="button" onClick={openAllProducts}>
+        <span className="catalog-menu-icon" aria-hidden="true"><LayoutGrid size={17} /></span>
+        <span>
+          <strong>Все товары</strong>
+          <small>Показать весь импортированный каталог</small>
+        </span>
+        <ChevronRight size={18} />
+      </button>
+      <section className="catalog-menu-list" aria-label="Категории товаров">
+        {menuCategories.length ? menuCategories.map((category) => (
+          <CatalogMenuItem
+            key={category.externalId}
+            category={category}
+            level={0}
+            expanded={expanded}
+            onToggle={toggleCategory}
+            onOpen={openCategory}
+          />
+        )) : <div className="empty">Загружаем категории...</div>}
+      </section>
     </main>
   );
 }
@@ -1189,6 +1354,7 @@ function App() {
   return (
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} onAdd={onAdd} cartCount={cartCount} />}
+      {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} />}
       {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} loading={loading} cartCount={cartCount} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
