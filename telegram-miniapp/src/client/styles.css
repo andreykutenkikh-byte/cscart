@@ -485,6 +485,7 @@ button {
   height: auto;
   aspect-ratio: 1 / 1;
   border-radius: 18px;
+  background: transparent;
 }
 
 .product-card img,
@@ -521,6 +522,7 @@ button {
   height: 100%;
   min-height: 88px;
   place-items: center;
+  background: #e6ded2;
   color: #b3121b;
   font-weight: 800;
 }
