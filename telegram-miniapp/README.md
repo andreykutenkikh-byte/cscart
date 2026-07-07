@@ -144,7 +144,26 @@ They also accept explicit query aliases for smoke checks and integrations:
 curl 'http://localhost:3001/api/catalog/products?available=true&priceMin=1000&priceMax=5000&filters[param:Размер материала]=600*1200,600х600'
 ```
 
+The products endpoint is page-based and also accepts `page`, `limit`, and `sort`:
+
+```bash
+curl 'http://localhost:3001/api/catalog/products?page=2&limit=24&sort=price_asc'
+```
+
+Supported sort values are `default`, `price_asc`, `price_desc`, `name_asc`, `availability_desc`, and `newest`. Product responses include `pagination.page`, `pagination.limit`, `pagination.total`, `pagination.totalPages`, `pagination.hasNextPage`, `pagination.hasMore`, and `pagination.nextPage`; the frontend uses this shape for the "Show more" catalog control.
+
 Multiple values inside the same param group behave as OR. Different groups, availability, price, category, and search behave as AND. Facet counts are computed from local PostgreSQL data in the API process. For MVP performance, counts are exact within the current category/search/price/availability context and account for other selected param groups when computing each param group.
+
+## Catalog Controls
+
+The mobile catalog supports:
+
+- selected filter chips near the top of the catalog; each chip can be removed and the clear action resets all filters;
+- a compact sort select using the documented `/api/catalog/products?sort=...` values;
+- a list/grid view toggle saved in `localStorage` under `dvkeramik.catalog.viewMode`;
+- a "Показать ещё" button that requests `nextPage`, appends products, deduplicates already loaded products, and hides when `pagination.hasMore` is false.
+
+The DNS-style filter screen remains the main filter editing surface. The catalog chips reflect the same filter state, so removing chips in the catalog updates the filter screen state on the next open.
 
 ## Environment
 
