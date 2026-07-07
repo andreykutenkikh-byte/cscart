@@ -1660,6 +1660,8 @@ button {
   position: sticky;
   bottom: calc(84px + env(safe-area-inset-bottom));
   z-index: 8;
+  display: grid;
+  gap: 10px;
   margin: 24px -22px -22px;
   padding: 14px 22px max(14px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--color-border);
@@ -1667,10 +1669,16 @@ button {
 }
 
 .source-link {
-  display: block;
-  margin-top: 12px;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
   color: var(--color-accent);
   text-align: center;
+  text-decoration: none;
   font-weight: 800;
 }
 

@@ -1007,8 +1007,8 @@ function ProductScreen({ product, setView, onAdd, cartCount }) {
       </section>
       <div className="detail-cta">
         <button className="primary full" onClick={() => onAdd(product)}>Добавить в корзину</button>
+        {product.productUrl ? <a className="source-link" href={product.productUrl} target="_blank" rel="noreferrer">Открыть на сайте</a> : null}
       </div>
-      {product.productUrl ? <a className="source-link" href={product.productUrl} target="_blank" rel="noreferrer">Открыть на сайте</a> : null}
     </main>
   );
 }
