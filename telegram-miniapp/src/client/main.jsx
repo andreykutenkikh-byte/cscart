@@ -72,13 +72,34 @@ function hasSquareMeterFactor(product) {
 }
 
 function getProductImages(product) {
-  const urls = [
-    ...(product?.images || []).map((image) => image.remoteUrl || image.remote_url || image.url),
-    product?.remoteImageUrl,
-    product?.imageUrl
+  const candidates = [
+    ...(product?.images || []),
+    product?.primaryImage,
+    {
+      id: product?.primaryImage?.id,
+      remoteUrl: product?.remoteImageUrl || product?.imageUrl,
+      thumbUrl: product?.thumbnailUrl,
+      listUrl: product?.listImageUrl,
+      detailUrl: product?.primaryImage?.detailUrl,
+      viewerUrl: product?.primaryImage?.viewerUrl
+    }
   ].filter(Boolean);
-  const uniqueUrls = [...new Set(urls)];
-  return uniqueUrls.map((remoteUrl, index) => ({ id: `${remoteUrl}-${index}`, remoteUrl }));
+  const seen = new Set();
+  return candidates
+    .map((image, index) => {
+      const remoteUrl = image.remoteUrl || image.remote_url || image.url;
+      if (!remoteUrl || seen.has(remoteUrl)) return null;
+      seen.add(remoteUrl);
+      return {
+        id: image.id || `${remoteUrl}-${index}`,
+        remoteUrl,
+        thumbUrl: image.thumbUrl || image.thumbnailUrl || image.listUrl || remoteUrl,
+        listUrl: image.listUrl || image.thumbUrl || remoteUrl,
+        detailUrl: image.detailUrl || image.listUrl || remoteUrl,
+        viewerUrl: image.viewerUrl || image.detailUrl || image.listUrl || remoteUrl
+      };
+    })
+    .filter(Boolean);
 }
 
 function flattenCategories(categories, depth = 0) {
@@ -294,11 +315,22 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString('ru-RU');
 }
 
-function ProductImage({ src, alt }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (!src || failed) return <div className="image-fallback">DV</div>;
-  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
+function ProductImage({ src, fallbackSrc, alt, loading = 'lazy' }) {
+  const sources = useMemo(() => [...new Set([src, fallbackSrc].filter(Boolean))], [src, fallbackSrc]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  useEffect(() => setSourceIndex(0), [sources.join('|')]);
+  if (!sources.length || sourceIndex >= sources.length) return <div className="image-fallback">DV</div>;
+  return (
+    <img
+      src={sources[sourceIndex]}
+      alt={alt}
+      loading={loading}
+      decoding="async"
+      onError={() => {
+        setSourceIndex((current) => current + 1);
+      }}
+    />
+  );
 }
 
 function AppHeader({ cartCount = 0, setView }) {
@@ -322,11 +354,12 @@ function AppHeader({ cartCount = 0, setView }) {
 function ProductCard({ product, onOpen }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
+  const cardImageFallback = product.remoteImageUrl || product.imageUrl;
   return (
     <article className="product-card">
       <button className="product-card__open" type="button" onClick={() => onOpen(product)}>
         <div className="product-card__image">
-          <ProductImage src={product.remoteImageUrl || product.imageUrl} alt={product.name} />
+          <ProductImage src={product.listImageUrl || product.thumbnailUrl || cardImageFallback} fallbackSrc={cardImageFallback} alt={product.name} />
         </div>
         <div className="product-card__body">
           <div className="product-card__name">{displayName}</div>
@@ -366,7 +399,8 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
   const visibleProducts = products.filter(Boolean);
-  const featuredProduct = visibleProducts.find((product) => product.remoteImageUrl || product.imageUrl) || visibleProducts[0];
+  const featuredProduct = visibleProducts.find((product) => product.listImageUrl || product.remoteImageUrl || product.imageUrl) || visibleProducts[0];
+  const featuredImageFallback = featuredProduct?.remoteImageUrl || featuredProduct?.imageUrl;
 
   const applyQuickFacet = (chip) => {
     if (chip.type === 'availability') {
@@ -391,7 +425,7 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
           <button onClick={() => setView('catalogMenu')}>В каталог</button>
         </div>
         <div className="hero__media">
-          <ProductImage src={featuredProduct?.remoteImageUrl || featuredProduct?.imageUrl} alt={featuredProduct?.name || 'Плитка'} />
+          <ProductImage src={featuredProduct?.listImageUrl || featuredProduct?.thumbnailUrl || featuredImageFallback} fallbackSrc={featuredImageFallback} alt={featuredProduct?.name || 'Плитка'} />
         </div>
       </section>
       <section>
@@ -852,7 +886,7 @@ function ProductGallery({ product }) {
           onTouchEnd={handleTouchEnd}
           aria-label="Открыть фото на весь экран"
         >
-          <ProductImage src={activeImage?.remoteUrl} alt={product.name} />
+          <ProductImage src={activeImage?.detailUrl || activeImage?.remoteUrl} fallbackSrc={activeImage?.remoteUrl} alt={product.name} loading="eager" />
         </button>
         {hasManyImages ? (
           <>
@@ -879,7 +913,7 @@ function ProductGallery({ product }) {
               onClick={() => setActiveIndex(index)}
               aria-label={`Фото ${index + 1}`}
             >
-              <ProductImage src={image.remoteUrl} alt={`${product.name} ${index + 1}`} />
+              <ProductImage src={image.thumbUrl || image.remoteUrl} fallbackSrc={image.remoteUrl} alt={`${product.name} ${index + 1}`} />
             </button>
           ))}
         </div>
@@ -952,7 +986,7 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
           </button>
         ) : null}
         <div className="image-viewer__stage">
-          <ProductImage src={activeImage?.remoteUrl} alt={`${productName} ${activeIndex + 1}`} />
+          <ProductImage src={activeImage?.viewerUrl || activeImage?.detailUrl || activeImage?.remoteUrl} fallbackSrc={activeImage?.remoteUrl} alt={`${productName} ${activeIndex + 1}`} loading="eager" />
         </div>
         {hasManyImages ? (
           <button className="image-viewer__nav next" type="button" onClick={() => goToImage(1)} aria-label="Следующее фото">
@@ -970,7 +1004,7 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
               onClick={() => setActiveIndex(index)}
               aria-label={`Показать фото ${index + 1}`}
             >
-              <ProductImage src={image.remoteUrl} alt={`${productName} ${index + 1}`} />
+              <ProductImage src={image.thumbUrl || image.remoteUrl} fallbackSrc={image.remoteUrl} alt={`${productName} ${index + 1}`} />
             </button>
           ))}
         </div>
@@ -1023,7 +1057,7 @@ function CartScreen({ cart, setCart, setView, cartCount }) {
       <div className="cart-list">
         {items.map((item) => (
           <div className="cart-item" key={item.productExternalId}>
-            <div className="cart-item__image"><ProductImage src={item.imageUrl} alt={item.name} /></div>
+            <div className="cart-item__image"><ProductImage src={item.imageUrl} fallbackSrc={item.remoteImageUrl} alt={item.name} /></div>
             <div>
               <strong>{formatDisplayTitle(item.name)}</strong>
               <span>{formatPrice(item.price, item.currencyId)}</span>

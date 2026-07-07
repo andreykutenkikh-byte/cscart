@@ -8,6 +8,7 @@ import { createOrder, getOrders } from './orders.js';
 import { importDvKeramikFeed } from './importer.js';
 import { getAdminOrders, getAdminSettings, getAdminVisitors, getMe, requireAdmin, runAdminImportNow } from './admin.js';
 import { recordVisit } from './visits.js';
+import { serveCachedImage } from './media.js';
 
 dotenv.config();
 
@@ -75,6 +76,8 @@ app.get('/api/catalog/product/:id', asyncRoute(async (req, res) => {
 app.get('/api/catalog/facets', asyncRoute(async (req, res) => {
   res.json({ facets: await getFacets(req.query) });
 }));
+
+app.get('/api/media/image/:imageId/:variant', asyncRoute(serveCachedImage));
 
 app.post('/api/orders', asyncRoute(async (req, res) => {
   const result = await createOrder(req);

@@ -1,4 +1,5 @@
 import { query } from './db.js';
+import { buildImageVariantUrls } from './media.js';
 
 const PAGE_LIMIT_MAX = 60;
 
@@ -233,7 +234,22 @@ function productMatchesSearch(product, search) {
   return haystack.includes(needle);
 }
 
+function decorateImage(image) {
+  if (!image?.id || !image?.remote_url) return null;
+  return {
+    id: image.id,
+    sortOrder: image.sort_order ?? 0,
+    ...buildImageVariantUrls(image)
+  };
+}
+
 function summarizeProduct(row) {
+  const primaryImage = decorateImage({
+    id: row.image_id,
+    remote_url: row.image_remote_url,
+    sort_order: 0
+  });
+
   return {
     id: row.id,
     externalId: row.external_id,
@@ -248,6 +264,9 @@ function summarizeProduct(row) {
     available: row.available,
     imageUrl: row.image_remote_url,
     remoteImageUrl: row.image_remote_url,
+    thumbnailUrl: primaryImage?.thumbUrl || row.image_remote_url,
+    listImageUrl: primaryImage?.listUrl || row.image_remote_url,
+    primaryImage,
     params: row.params_json || {}
   };
 }
@@ -291,14 +310,16 @@ async function loadCandidateProducts({ categoryId, search, filters }) {
 
   const result = await query(`
     SELECT p.*,
-      (
-        SELECT pi.remote_url
-        FROM product_images pi
-        WHERE pi.product_id = p.id
-        ORDER BY pi.sort_order, pi.id
-        LIMIT 1
-      ) AS image_remote_url
+      primary_image.id::text AS image_id,
+      primary_image.remote_url AS image_remote_url
     FROM products p
+    LEFT JOIN LATERAL (
+      SELECT pi.id, pi.remote_url
+      FROM product_images pi
+      WHERE pi.product_id = p.id
+      ORDER BY pi.sort_order, pi.id
+      LIMIT 1
+    ) primary_image ON TRUE
     WHERE ${where.join(' AND ')}
     ORDER BY p.available DESC, p.name ASC
   `, values);
@@ -362,7 +383,7 @@ export async function getProductDetail(id) {
   if (!product) return null;
 
   const images = uniqueImageRows((await query(`
-    SELECT id, remote_url, sort_order
+    SELECT id::text AS id, remote_url, sort_order
     FROM product_images
     WHERE product_id = $1
     ORDER BY sort_order, id
@@ -370,9 +391,9 @@ export async function getProductDetail(id) {
   const categories = await getCategoryRows();
 
   return {
-    ...summarizeProduct({ ...product, image_remote_url: images[0]?.remote_url || null }),
+    ...summarizeProduct({ ...product, image_id: images[0]?.id || null, image_remote_url: images[0]?.remote_url || null }),
     sourceUrl: product.source_url,
-    images: images.map((image) => ({ id: image.id, remoteUrl: image.remote_url, sortOrder: image.sort_order })),
+    images: images.map(decorateImage).filter(Boolean),
     breadcrumb: buildBreadcrumb(categories, product.category_external_id)
   };
 }

@@ -9,7 +9,8 @@
     "start": "node server/index.js",
     "db:migrate": "node server/migrate.js",
     "import:dvkeramik": "node server/import-cli.js",
-    "check": "node --check server/db.js && node --check server/catalog.js && node --check server/importer.js && node --check server/orders.js && node --check server/telegram.js && node --check server/admin.js && node --check server/visits.js && node --check server/index.js && vite build"
+    "images:prewarm": "node server/prewarm-images.js",
+    "check": "node --check server/db.js && node --check server/catalog.js && node --check server/importer.js && node --check server/orders.js && node --check server/telegram.js && node --check server/admin.js && node --check server/visits.js && node --check server/media.js && node --check server/prewarm-images.js && node --check server/index.js && vite build"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.2",
@@ -21,8 +22,8 @@
     "pg": "^8.22.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "sharp": "^0.35.3",
     "slugify": "^1.6.6",
     "vite": "^7.3.0"
-  },
-  "devDependencies": {}
+  }
 }

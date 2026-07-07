@@ -2,7 +2,7 @@
 
 Mobile-first Telegram Mini App catalog for DV Keramik. The app imports products from the YML feed into a local PostgreSQL database, serves catalog APIs from that database only, stores request/orders, and can notify a Telegram manager chat when bot credentials are configured.
 
-Graphic and media content stays on the parent DV Keramik server. The Mini App stores textual/catalog data and remote image URL references only; it does not download, proxy, cache, resize, thumbnail, base64-encode, or store image binaries.
+The parent DV Keramik server remains the source of truth for graphic and media content. The Mini App stores textual/catalog data and original remote image URL references in PostgreSQL. It may create disposable optimized WebP derivatives in a local filesystem cache for faster mobile browsing, but it does not store image binaries/base64 in PostgreSQL and cached files are safe to delete and regenerate from `product_images.remote_url`.
 
 ## What Is Included
 
@@ -17,17 +17,60 @@ Graphic and media content stays on the parent DV Keramik server. The Mini App st
 
 The importer downloads only the YML feed from `DVKERAMIK_YML_URL`. It persists category/product text, params, prices, availability, category tree, and order snapshots in PostgreSQL. Product pictures are persisted only as normalized absolute HTTP(S) remote URLs in `product_images.remote_url`.
 
-If the feed contains relative picture paths, the importer normalizes them against the parent source domain. Frontend product cards and product details render those remote URLs directly, so Telegram WebView or the browser loads images from the parent/source server.
+If the feed contains relative picture paths, the importer normalizes them against the parent source domain. Catalog APIs return the original remote URLs and, when the image cache is enabled, safe derivative URLs for optimized thumbnails/previews.
 
-User-facing catalog APIs read from the local database only. They do not fetch the YML feed and do not proxy or cache images.
+User-facing catalog APIs read from the local database only. They do not fetch the YML feed. Image derivative requests read `product_images.remote_url` from PostgreSQL by image id and never accept arbitrary source URLs.
 
 ## Product Image Gallery
 
-Product listing responses return a single primary remote image URL for each product. Product detail responses return the full `images` array from `product_images`, ordered by `sort_order` and then `id`, with exact duplicate remote URLs removed from the response.
+Product listing responses return a single primary remote image URL for each product plus optimized `thumbnailUrl`, `listImageUrl`, and `primaryImage` fields when the cache is enabled. Product detail responses return the full `images` array from `product_images`, ordered by `sort_order` and then `id`, with exact duplicate remote URLs removed from the response. Each detail image keeps `remoteUrl` and adds `thumbUrl`, `detailUrl`, and `viewerUrl`.
 
 The mobile frontend renders product cards, cart images, product detail images, thumbnails, and the full-screen image viewer with `object-fit: contain`. This keeps ceramic tile, mosaic, packaging, and interior photos fully visible instead of cropping them. Thumbnail strips are horizontally scrollable and do not create body-level horizontal overflow.
 
-The full-screen image viewer is a client-only viewer for the existing remote URLs. It does not download, proxy, cache, resize, generate thumbnails, write files, or convert images to base64. Browser or Telegram WebView loads the original remote URLs directly from the parent DV Keramik server.
+Product cards and cart rows use the smaller list/thumb derivative URLs. Product detail uses the `detail` derivative for the main image, `thumb` for thumbnail strips, and `viewer` in the full-screen viewer with the original remote URL as fallback. Browser or Telegram WebView loads the optimized Mini App endpoint first and falls back to the parent DV Keramik URL if a derivative is unavailable.
+
+## Disposable Image Cache
+
+The image cache endpoint is:
+
+```text
+GET /api/media/image/:imageId/:variant
+```
+
+`imageId` must be an existing `product_images.id` value. The endpoint looks up `product_images.remote_url` in PostgreSQL, validates the host, downloads only that stored URL, creates a WebP derivative, and serves the cached file on later requests. It is not an open proxy and does not support `?url=...`.
+
+Allowed variants:
+
+- `thumb`: 160px wide by default, for thumbnail strips.
+- `list`: 360px wide by default, for product lists and cart rows.
+- `detail`: 1200px wide by default, for the product detail main image.
+- `viewer`: 1800px wide by default, for the full-screen viewer.
+
+The cache stores only disposable optimized derivatives under `IMAGE_CACHE_DIR`, for example `/var/cache/dvkeramik-miniapp/images` in production or `telegram-miniapp/.cache/images` in local development. Cache filenames are based on image id, remote URL hash, variant, and processing options. The original remote URL remains in PostgreSQL and remains the source of truth.
+
+Safety controls:
+
+- Only `http:` and `https:` source URLs from `IMAGE_CACHE_ALLOWED_HOSTS` are allowed.
+- Defaults allow only `dvkeramik.ru` and `www.dvkeramik.ru`.
+- DNS results and the connected upstream IP must be public, not localhost/private/reserved.
+- Redirects are limited and revalidated.
+- Upstream content type must be `image/*`.
+- Source downloads have timeout and max-byte limits.
+- Cached files are written atomically and can be deleted at any time.
+
+To clear cache:
+
+```bash
+rm -rf /var/cache/dvkeramik-miniapp/images/*
+```
+
+Optional prewarm:
+
+```bash
+pnpm images:prewarm -- --limit=200 --variants=list,thumb --concurrency=3
+```
+
+Prewarm is optional. Lazy on-demand generation works without it.
 
 ## Clean White UI
 
@@ -119,6 +162,16 @@ MINIAPP_PUBLIC_URL=
 ADMIN_TELEGRAM_USERNAMES=andreykutenkikh
 ADMIN_TELEGRAM_IDS=
 IMPORT_SECRET=change-me
+IMAGE_CACHE_ENABLED=true
+IMAGE_CACHE_DIR=/var/cache/dvkeramik-miniapp/images
+IMAGE_CACHE_ALLOWED_HOSTS=dvkeramik.ru,www.dvkeramik.ru
+IMAGE_CACHE_MAX_SOURCE_BYTES=15000000
+IMAGE_CACHE_FETCH_TIMEOUT_MS=8000
+IMAGE_CACHE_QUALITY=78
+IMAGE_CACHE_THUMB_WIDTH=160
+IMAGE_CACHE_LIST_WIDTH=360
+IMAGE_CACHE_DETAIL_WIDTH=1200
+IMAGE_CACHE_VIEWER_WIDTH=1800
 ```
 
 Telegram bot variables are optional. If they are missing or notification fails, `/api/orders` still saves the request in the database.
@@ -190,6 +243,15 @@ The `app` service runs migrations before starting the API. The `import-cron` ser
 
 For reverse-proxy production deployments, set `HOST=127.0.0.1` so the Node service is reachable only by the local proxy and public traffic uses HTTPS.
 
+For production image cache, create a writable cache directory for the app user:
+
+```bash
+mkdir -p /var/cache/dvkeramik-miniapp/images
+chown -R <app-user>:<app-user> /var/cache/dvkeramik-miniapp
+```
+
+The cache directory must not be inside a git-tracked source tree. It is safe to remove; derivatives regenerate from `product_images.remote_url`.
+
 ## Manual Import
 
 ```bash
@@ -203,7 +265,7 @@ curl -X POST http://localhost:3001/api/admin/import/dvkeramik \
   -H "x-import-secret: $IMPORT_SECRET"
 ```
 
-The endpoint is disabled unless `IMPORT_SECRET` or `ADMIN_IMPORT_SECRET` is configured. The importer stores picture references as remote URLs only; it does not write image files to disk or to database binary fields.
+The endpoint is disabled unless `IMPORT_SECRET` or `ADMIN_IMPORT_SECRET` is configured. The importer stores picture references as remote URLs only; it does not write image files to disk or to database binary fields. Image cache derivatives are generated later by `/api/media/image/:imageId/:variant` from the stored DB URLs.
 
 ## API Smoke Checks
 

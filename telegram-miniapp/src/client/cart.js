@@ -20,7 +20,8 @@ export function addToCart(cart, product, quantity = 1) {
     name: product.name,
     price: product.price,
     currencyId: product.currencyId,
-    imageUrl: product.remoteImageUrl || product.imageUrl,
+    imageUrl: product.listImageUrl || product.thumbnailUrl || product.remoteImageUrl || product.imageUrl,
+    remoteImageUrl: product.remoteImageUrl || product.imageUrl,
     quantity: 0
   };
   return {
