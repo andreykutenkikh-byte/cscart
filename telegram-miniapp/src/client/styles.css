@@ -332,20 +332,13 @@ button {
 }
 
 .catalog-menu-heading {
-  margin: 12px 0 14px;
+  margin: 12px 0 12px;
 }
 
 .catalog-menu-heading h1 {
   margin: 0 0 6px;
   font-size: 23px;
   line-height: 1.15;
-}
-
-.catalog-menu-heading p {
-  margin: 0;
-  color: #70645d;
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 .catalog-menu-all,
@@ -358,14 +351,20 @@ button {
 }
 
 .catalog-menu-all {
-  grid-template-columns: 42px minmax(0, 1fr) 42px;
-  min-height: 60px;
-  margin-bottom: 12px;
+  grid-template-columns: 42px minmax(0, 1fr) 44px;
+  width: 100%;
+  min-height: 58px;
   overflow: hidden;
-  border: 1px solid #e7ded5;
-  border-radius: 18px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid #efe6dd;
   color: #201b18;
   text-align: left;
+}
+
+.catalog-menu-all .catalog-menu-icon {
+  align-self: center;
+  justify-self: center;
 }
 
 .catalog-menu-all > span:not(.catalog-menu-icon) {
@@ -373,6 +372,7 @@ button {
   min-width: 0;
   gap: 3px;
   align-content: center;
+  padding-right: 8px;
 }
 
 .catalog-menu-all > svg {

@@ -552,17 +552,16 @@ function CatalogMenuScreen({ categories, setCategoryId, setFilters, setSearch, s
       <div className="breadcrumb">ДВ Керамик / Каталог товаров</div>
       <section className="catalog-menu-heading">
         <h1>Каталог товаров</h1>
-        <p>Разделы сгруппированы по структуре основного сайта.</p>
       </section>
-      <button className="catalog-menu-all" type="button" onClick={openAllProducts}>
-        <span className="catalog-menu-icon" aria-hidden="true"><LayoutGrid size={17} /></span>
-        <span>
-          <strong>Все товары</strong>
-          <small>Показать весь импортированный каталог</small>
-        </span>
-        <ChevronRight size={18} />
-      </button>
       <section className="catalog-menu-list" aria-label="Категории товаров">
+        <button className="catalog-menu-all" type="button" onClick={openAllProducts}>
+          <span className="catalog-menu-icon" aria-hidden="true"><LayoutGrid size={17} /></span>
+          <span>
+            <strong>Все товары</strong>
+            <small>Показать весь каталог</small>
+          </span>
+          <ChevronRight size={18} />
+        </button>
         {menuCategories.length ? menuCategories.map((category) => (
           <CatalogMenuItem
             key={category.externalId}
