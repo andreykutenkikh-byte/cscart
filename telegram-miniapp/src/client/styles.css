@@ -673,25 +673,6 @@ button {
   object-position: center;
 }
 
-.product-tag {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  display: inline-flex;
-  min-height: 23px;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: 12px;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-}
-
-.product-tag.stock {
-  background: #55705c;
-}
-
 .image-fallback {
   display: grid;
   width: 100%;
