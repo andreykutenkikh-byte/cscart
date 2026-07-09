@@ -1,6 +1,9 @@
+import { installSafeAreaBridge } from './safe-area.js';
+
 export function createTelegramPlatform() {
   const webApp = window.Telegram?.WebApp;
   const user = webApp?.initDataUnsafe?.user || null;
+  const updateSafeArea = installSafeAreaBridge(webApp);
 
   return {
     name: 'telegram',
@@ -14,6 +17,7 @@ export function createTelegramPlatform() {
     ready() {
       webApp?.ready?.();
       webApp?.expand?.();
+      updateSafeArea();
     },
     headers() {
       return webApp?.initData ? { 'x-telegram-init-data': webApp.initData } : {};
