@@ -472,26 +472,24 @@ function HomeBannerCarousel({ banners = [] }) {
     setActiveIndex(0);
   }, [visibleBanners.map((banner) => banner.id).join('|')]);
 
-  useEffect(() => {
-    if (visibleBanners.length < 2) return undefined;
-    const timer = window.setInterval(() => {
-      setActiveIndex((current) => (current + 1) % visibleBanners.length);
-    }, 5500);
-    return () => window.clearInterval(timer);
-  }, [visibleBanners.length]);
-
   if (!visibleBanners.length) return null;
 
-  const activeBanner = visibleBanners[activeIndex % visibleBanners.length];
+  const safeActiveIndex = activeIndex % visibleBanners.length;
   const goTo = (index) => setActiveIndex((index + visibleBanners.length) % visibleBanners.length);
-  const image = <img src={activeBanner.imageUrl} alt={activeBanner.title || 'Баннер ДВ Керамик'} loading="eager" decoding="async" />;
-  const content = activeBanner.targetUrl ? (
-    <a className="home-banner-frame" href={activeBanner.targetUrl} target="_blank" rel="noreferrer">
-      {image}
-    </a>
-  ) : (
-    <div className="home-banner-frame">{image}</div>
-  );
+  const renderBanner = (banner, index) => {
+    const image = <img src={banner.imageUrl} alt={banner.title || 'DV Keramik banner'} loading={index === 0 ? 'eager' : 'lazy'} decoding="async" />;
+    const className = 'home-banner-slide';
+
+    if (banner.targetUrl) {
+      return (
+        <a key={banner.id} className={className} href={banner.targetUrl} target="_blank" rel="noreferrer">
+          {image}
+        </a>
+      );
+    }
+
+    return <div key={banner.id} className={className}>{image}</div>;
+  };
 
   return (
     <section
@@ -507,13 +505,20 @@ function HomeBannerCarousel({ banners = [] }) {
         goTo(activeIndex + (delta < 0 ? 1 : -1));
       }}
     >
-      {content}
+      <div className="home-banner-frame" aria-live="polite">
+        <div
+          className="home-banner-track"
+          style={{ transform: `translate3d(-${safeActiveIndex * 100}%, 0, 0)` }}
+        >
+          {visibleBanners.map(renderBanner)}
+        </div>
+      </div>
       {visibleBanners.length > 1 ? (
         <div className="home-banner-dots" aria-label="Баннеры">
           {visibleBanners.map((banner, index) => (
             <button
               key={banner.id}
-              className={index === activeIndex ? 'active' : ''}
+              className={index === safeActiveIndex ? 'active' : ''}
               type="button"
               onClick={() => goTo(index)}
               aria-label={`Показать баннер ${index + 1}`}
