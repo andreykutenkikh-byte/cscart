@@ -421,8 +421,12 @@ function UnitPriceDisplay({ product, variant = 'card' }) {
   }
 
   const isPiece = unit === 'piece';
-  const primaryLabel = isPiece ? unitPricing.pieceLabel : unitPricing.m2Label;
-  const secondaryLabel = isPiece ? unitPricing.m2Label : unitPricing.pieceLabel;
+  const piecesLabel = Number(unitPricing.piecesPerM2).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
+  const conversionLabel = `${piecesLabel} шт в 1 м²`;
+  const primaryLabel = isPiece ? `≈ ${unitPricing.pieceLabel}` : unitPricing.m2Label;
+  const secondaryLabel = isPiece
+    ? `${unitPricing.m2Label} • ${conversionLabel}`
+    : `≈ ${unitPricing.pieceLabel} • ${conversionLabel}`;
 
   return (
     <div className={`unit-price unit-price--${variant}`}>

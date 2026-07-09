@@ -22,9 +22,13 @@ assert.equal(parsePositiveUnitNumber('10 шт'), 10);
 assert.equal(parsePositiveUnitNumber('10,5'), 10.5);
 assert.equal(parsePositiveUnitNumber('10.5 шт/м²'), 10.5);
 assert.equal(parsePositiveUnitNumber('0'), null);
+assert.equal(parsePositiveUnitNumber('-10'), null);
+assert.equal(parsePositiveUnitNumber('−10'), null);
+assert.equal(parsePositiveUnitNumber('10-20'), null);
 assert.equal(parsePositiveUnitNumber('нет данных'), null);
 assert.equal(extractPiecesPerM2({ Материал: 'Мрамор', 'Штук в кв.м.': ['10.749', '10,749'] }), 10.749);
 assert.equal(extractPiecesPerM2({ 'штук в м2': '0' }), null);
+assert.equal(extractPiecesPerM2({ 'штук в м2': '-10' }), null);
 
 assert.deepEqual(buildUnitPricing({
   price: 840,

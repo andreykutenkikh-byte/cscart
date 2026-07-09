@@ -26,9 +26,12 @@ function isPiecesPerM2ParamName(name) {
 
 export function parsePositiveUnitNumber(value) {
   for (const item of asArray(value)) {
-    const match = String(item).replace(/\s+/g, ' ').match(/\d+(?:[.,]\d+)?/);
-    if (!match) continue;
-    const number = Number(match[0].replace(',', '.'));
+    const matches = String(item)
+      .replace(/\s+/g, ' ')
+      .match(/[-−+]?\d+(?:[.,]\d+)?/g);
+    if (!matches || matches.length !== 1) continue;
+    if (/^[-−]/.test(matches[0])) continue;
+    const number = Number(matches[0].replace(',', '.'));
     if (Number.isFinite(number) && number > 0) return number;
   }
 
