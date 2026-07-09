@@ -1,5 +1,6 @@
 import { query } from './db.js';
 import { buildImageVariantUrls } from './media.js';
+import { buildUnitPricing } from './unit-pricing.js';
 
 const PAGE_LIMIT_MAX = 60;
 const PRODUCT_SORTS = new Set(['default', 'price_asc', 'price_desc', 'name_asc', 'availability_desc', 'newest']);
@@ -291,6 +292,8 @@ function summarizeProduct(row) {
     remote_url: row.image_remote_url,
     sort_order: 0
   });
+  const price = row.price === null ? null : Number(row.price);
+  const params = row.params_json || {};
 
   return {
     id: row.id,
@@ -301,7 +304,7 @@ function summarizeProduct(row) {
     description: row.description,
     slug: row.slug,
     productUrl: row.product_url,
-    price: row.price === null ? null : Number(row.price),
+    price,
     currencyId: row.currency_id,
     available: row.available,
     imageUrl: row.image_remote_url,
@@ -309,7 +312,8 @@ function summarizeProduct(row) {
     thumbnailUrl: primaryImage?.thumbUrl || row.image_remote_url,
     listImageUrl: primaryImage?.listUrl || row.image_remote_url,
     primaryImage,
-    params: row.params_json || {}
+    params,
+    unitPricing: buildUnitPricing({ price, currencyId: row.currency_id, params })
   };
 }
 

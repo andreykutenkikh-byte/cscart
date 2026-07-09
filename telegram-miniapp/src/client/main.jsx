@@ -61,9 +61,9 @@ function formatPrice(value, currency = 'RUB') {
 
 function formatProductPrice(product) {
   if (!product) return formatPrice(null);
+  if (product.unitPricing?.canToggleUnits && product.unitPricing.m2Label) return product.unitPricing.m2Label;
   const formatted = formatPrice(product.price, product.currencyId);
-  if (formatted === 'Цена по запросу') return formatted;
-  return hasSquareMeterFactor(product) ? `${formatted}/м²` : formatted;
+  return formatted;
 }
 
 function formatDisplayTitle(name = '') {
@@ -79,22 +79,6 @@ function formatDisplayTitle(name = '') {
   return value.replace(/[А-ЯЁ]{4,}/g, (word) => {
     const lower = word.toLocaleLowerCase('ru-RU');
     return `${lower.charAt(0).toLocaleUpperCase('ru-RU')}${lower.slice(1)}`;
-  });
-}
-
-function hasSquareMeterFactor(product) {
-  return Object.entries(product?.params || {}).some(([name, rawValue]) => {
-    const normalizedName = String(name).toLowerCase().replace(/\s+/g, ' ');
-    const value = Array.isArray(rawValue) ? rawValue.join(' ') : rawValue;
-    const normalizedValue = String(value ?? '').trim();
-    const isSquareMeterFactor = normalizedName.includes('штук')
-      && (
-        normalizedName.includes('кв.м')
-        || normalizedName.includes('кв м')
-        || normalizedName.includes('м²')
-        || normalizedName.includes('м2')
-      );
-    return isSquareMeterFactor && normalizedValue && normalizedValue !== '0';
   });
 }
 
@@ -424,15 +408,52 @@ function AppHeader({ cartCount = 0, setView, brand = DEFAULT_BRAND }) {
   );
 }
 
-function ProductCard({ product, onOpen, onAdd, viewMode = 'list' }) {
+function UnitPriceDisplay({ product, variant = 'card' }) {
+  const unitPricing = product?.unitPricing?.canToggleUnits ? product.unitPricing : null;
+  const [unit, setUnit] = useState(unitPricing?.defaultUnit || 'm2');
+
+  useEffect(() => {
+    setUnit(unitPricing?.defaultUnit || 'm2');
+  }, [unitPricing?.defaultUnit, product?.externalId]);
+
+  if (!unitPricing) {
+    return <strong>{formatProductPrice(product)}</strong>;
+  }
+
+  const isPiece = unit === 'piece';
+  const primaryLabel = isPiece ? unitPricing.pieceLabel : unitPricing.m2Label;
+  const secondaryLabel = isPiece ? unitPricing.m2Label : unitPricing.pieceLabel;
+
+  return (
+    <div className={`unit-price unit-price--${variant}`}>
+      <div className="unit-price__main">
+        <strong>{primaryLabel}</strong>
+        <small>{secondaryLabel}</small>
+      </div>
+      <div className="unit-switcher" role="group" aria-label="Единица цены">
+        <button type="button" className={!isPiece ? 'active' : ''} onClick={(event) => { event.stopPropagation(); setUnit('m2'); }}>м²</button>
+        <button type="button" className={isPiece ? 'active' : ''} onClick={(event) => { event.stopPropagation(); setUnit('piece'); }}>шт</button>
+      </div>
+    </div>
+  );
+}
+
+function ProductCard({ product, onOpen, viewMode = 'list' }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   const cardImageFallback = product.remoteImageUrl || product.imageUrl;
   const modeClass = viewMode === 'grid' ? 'product-card--grid' : 'product-card--list';
   const availabilityLabel = product.available ? 'В наличии' : 'Под заказ';
+  const openProduct = () => onOpen(product);
+  const handleOpenKeyDown = (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openProduct();
+  };
+
   return (
     <article className={`product-card ${modeClass}`}>
-      <button className="product-card__open" type="button" onClick={() => onOpen(product)}>
+      <div className="product-card__open" role="button" tabIndex={0} onClick={openProduct} onKeyDown={handleOpenKeyDown}>
         <div className="product-card__image">
           <ProductImage src={product.listImageUrl || product.thumbnailUrl || cardImageFallback} fallbackSrc={cardImageFallback} alt={product.name} />
         </div>
@@ -441,16 +462,10 @@ function ProductCard({ product, onOpen, onAdd, viewMode = 'list' }) {
           <div className="product-card__meta">{getProductMeta(product)}</div>
           <div className={`product-card__stock ${product.available ? 'available' : ''}`}>{availabilityLabel}</div>
           <div className="product-card__bottom">
-            <strong>{formatProductPrice(product)}</strong>
+            <UnitPriceDisplay product={product} variant="card" />
           </div>
         </div>
-      </button>
-      {onAdd ? (
-        <button className="product-card__cart" type="button" onClick={() => onAdd(product)} aria-label={`Добавить в корзину ${product.name}`}>
-          <ShoppingCart size={15} />
-          <span>В корзину</span>
-        </button>
-      ) : null}
+      </div>
     </article>
   );
 }
@@ -654,7 +669,6 @@ function CatalogScreen({
   setSearch,
   setView,
   onOpen,
-  onAdd,
   onOpenFilters,
   onLoadMore,
   loading,
@@ -670,7 +684,6 @@ function CatalogScreen({
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
   const selectedFilterItems = getSelectedFilterItems(filters, facets);
-  const selectedFiltersCount = countSelectedFilters(filters);
   const visibleProducts = products.filter(Boolean);
   const productListClassName = `product-list product-list--${viewMode === 'grid' ? 'grid' : 'list'}`;
 
@@ -682,11 +695,6 @@ function CatalogScreen({
           <Search size={18} />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по offers" />
         </label>
-        <button className="toolbar-filter-button" type="button" onClick={onOpenFilters}>
-          <SlidersHorizontal size={16} />
-          <span>Фильтр</span>
-          {selectedFiltersCount ? <b>{selectedFiltersCount}</b> : null}
-        </button>
       </div>
       <div className="breadcrumb">{selectedCategory ? `Каталог / ${selectedCategory.name}` : 'Каталог / все категории'}</div>
       {selectedFilterItems.length ? (
@@ -753,7 +761,6 @@ function CatalogScreen({
             key={product.externalId}
             product={product}
             onOpen={onOpen}
-            onAdd={onAdd}
             viewMode={viewMode}
           />
         ))}
@@ -1283,7 +1290,7 @@ function ProductScreen({ product, setView, onAdd, cartCount, brand }) {
       <section className="detail-purchase">
         <div>
           <span>Цена</span>
-          <strong>{formatProductPrice(product)}</strong>
+          <UnitPriceDisplay product={product} variant="detail" />
           <small>{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</small>
         </div>
         <b className={product.available ? 'detail-stock in-stock' : 'detail-stock'}>{product.available ? 'В наличии' : 'Под заказ'}</b>
@@ -1787,7 +1794,7 @@ function App() {
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} brand={brand} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
