@@ -392,15 +392,29 @@ function BrandMark({ brand = DEFAULT_BRAND }) {
 function AppHeader({ cartCount = 0, setView, brand = DEFAULT_BRAND }) {
   const title = brand.title || DEFAULT_BRAND.title;
   const subtitle = brand.subtitle || DEFAULT_BRAND.subtitle;
+  const logoUrl = String(brand.logoUrl || '').trim();
+  const [fullLogoFailed, setFullLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setFullLogoFailed(false);
+  }, [logoUrl]);
+
+  const showFullLogo = Boolean(logoUrl && !fullLogoFailed);
 
   return (
     <header className="app-header">
-      <button className="brand-lockup" onClick={() => setView('home')} aria-label="На главную">
-        <BrandMark brand={brand} />
-        <span>
-          <strong>{title}</strong>
-          <small>{subtitle}</small>
-        </span>
+      <button className={`brand-lockup${showFullLogo ? ' brand-lockup--logo-only' : ''}`} onClick={() => setView('home')} aria-label="На главную">
+        {showFullLogo ? (
+          <img className="brand-logo-full" src={logoUrl} alt={title} onError={() => setFullLogoFailed(true)} />
+        ) : (
+          <>
+            <BrandMark brand={brand} />
+            <span>
+              <strong>{title}</strong>
+              <small>{subtitle}</small>
+            </span>
+          </>
+        )}
       </button>
       <button className="header-action" onClick={() => setView('cart')} aria-label="Открыть корзину">
         <ShoppingCart size={18} />
