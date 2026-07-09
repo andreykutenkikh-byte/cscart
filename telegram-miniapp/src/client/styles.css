@@ -786,6 +786,12 @@ button {
   z-index: 2;
 }
 
+.product-card--list .product-card__favorite {
+  top: auto;
+  right: 12px;
+  bottom: 12px;
+}
+
 .product-card--list {
   display: grid;
   gap: 10px;
@@ -917,6 +923,12 @@ button {
   font-weight: 720;
 }
 
+.product-card--list .product-card__stock {
+  justify-self: start;
+  max-width: calc(100% - 52px);
+  overflow-wrap: anywhere;
+}
+
 .product-card__stock.available {
   color: #2f7d58;
 }
@@ -924,6 +936,10 @@ button {
 .product-card__bottom {
   display: block;
   min-width: 0;
+}
+
+.product-card--list .product-card__bottom {
+  padding-right: 48px;
 }
 
 .product-card__bottom strong {
