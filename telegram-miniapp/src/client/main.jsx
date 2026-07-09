@@ -9,14 +9,15 @@ import './styles.css';
 const platform = getPlatform();
 const CATALOG_PAGE_LIMIT = 24;
 const CATALOG_VIEW_MODE_KEY = 'dvkeramik.catalog.viewMode';
+const CATALOG_UNIT_MODE_KEY = 'dvkeramik.catalogUnitMode';
 
 const SORT_OPTIONS = [
-  { value: 'default', label: 'По умолчанию' },
-  { value: 'price_asc', label: 'Сначала дешевле' },
-  { value: 'price_desc', label: 'Сначала дороже' },
-  { value: 'name_asc', label: 'По названию' },
-  { value: 'availability_desc', label: 'Сначала в наличии' },
-  { value: 'newest', label: 'Недавно обновленные' }
+  { value: 'default', label: 'По умолч.' },
+  { value: 'price_asc', label: 'Дешевле' },
+  { value: 'price_desc', label: 'Дороже' },
+  { value: 'name_asc', label: 'Название' },
+  { value: 'availability_desc', label: 'В наличии' },
+  { value: 'newest', label: 'Новинки' }
 ];
 
 const DEFAULT_BRAND = {
@@ -32,6 +33,15 @@ function loadCatalogViewMode() {
     return value === 'grid' || value === 'list' ? value : 'list';
   } catch {
     return 'list';
+  }
+}
+
+function loadCatalogUnitMode() {
+  try {
+    const value = window.localStorage.getItem(CATALOG_UNIT_MODE_KEY);
+    return value === 'piece' || value === 'm2' ? value : 'm2';
+  } catch {
+    return 'm2';
   }
 }
 
@@ -408,18 +418,37 @@ function AppHeader({ cartCount = 0, setView, brand = DEFAULT_BRAND }) {
   );
 }
 
-function UnitPriceDisplay({ product, variant = 'card' }) {
+function UnitModeSwitcher({ value, onChange, className = '' }) {
+  const isPiece = value === 'piece';
+  const selectUnit = (nextValue, event) => {
+    event.stopPropagation();
+    onChange(nextValue);
+  };
+
+  return (
+    <div className={`unit-switcher ${className}`.trim()} role="group" aria-label="Единица цены">
+      <button type="button" className={!isPiece ? 'active' : ''} onClick={(event) => selectUnit('m2', event)}>м²</button>
+      <button type="button" className={isPiece ? 'active' : ''} onClick={(event) => selectUnit('piece', event)}>шт</button>
+    </div>
+  );
+}
+
+function UnitPriceDisplay({ product, variant = 'card', unit: controlledUnit, onUnitChange, showSwitcher = variant === 'detail' }) {
   const unitPricing = product?.unitPricing?.canToggleUnits ? product.unitPricing : null;
-  const [unit, setUnit] = useState(unitPricing?.defaultUnit || 'm2');
+  const defaultUnit = unitPricing?.defaultUnit || 'm2';
+  const [localUnit, setLocalUnit] = useState(controlledUnit || defaultUnit);
 
   useEffect(() => {
-    setUnit(unitPricing?.defaultUnit || 'm2');
-  }, [unitPricing?.defaultUnit, product?.externalId]);
+    if (controlledUnit === undefined) {
+      setLocalUnit(defaultUnit);
+    }
+  }, [controlledUnit, defaultUnit, product?.externalId]);
 
   if (!unitPricing) {
     return <strong>{formatProductPrice(product)}</strong>;
   }
 
+  const unit = controlledUnit || localUnit;
   const isPiece = unit === 'piece';
   const piecesLabel = Number(unitPricing.piecesPerM2).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
   const conversionLabel = `${piecesLabel} шт в 1 м²`;
@@ -427,6 +456,13 @@ function UnitPriceDisplay({ product, variant = 'card' }) {
   const secondaryLabel = isPiece
     ? `${unitPricing.m2Label} • ${conversionLabel}`
     : `≈ ${unitPricing.pieceLabel} • ${conversionLabel}`;
+  const handleUnitChange = (nextUnit) => {
+    if (onUnitChange) {
+      onUnitChange(nextUnit);
+      return;
+    }
+    setLocalUnit(nextUnit);
+  };
 
   return (
     <div className={`unit-price unit-price--${variant}`}>
@@ -434,15 +470,12 @@ function UnitPriceDisplay({ product, variant = 'card' }) {
         <strong>{primaryLabel}</strong>
         <small>{secondaryLabel}</small>
       </div>
-      <div className="unit-switcher" role="group" aria-label="Единица цены">
-        <button type="button" className={!isPiece ? 'active' : ''} onClick={(event) => { event.stopPropagation(); setUnit('m2'); }}>м²</button>
-        <button type="button" className={isPiece ? 'active' : ''} onClick={(event) => { event.stopPropagation(); setUnit('piece'); }}>шт</button>
-      </div>
+      {showSwitcher ? <UnitModeSwitcher value={unit} onChange={handleUnitChange} /> : null}
     </div>
   );
 }
 
-function ProductCard({ product, onOpen, viewMode = 'list' }) {
+function ProductCard({ product, onOpen, viewMode = 'list', unitMode = 'm2' }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   const cardImageFallback = product.remoteImageUrl || product.imageUrl;
@@ -466,7 +499,7 @@ function ProductCard({ product, onOpen, viewMode = 'list' }) {
           <div className="product-card__meta">{getProductMeta(product)}</div>
           <div className={`product-card__stock ${product.available ? 'available' : ''}`}>{availabilityLabel}</div>
           <div className="product-card__bottom">
-            <UnitPriceDisplay product={product} variant="card" />
+            <UnitPriceDisplay product={product} variant="card" unit={unitMode} showSwitcher={false} />
           </div>
         </div>
       </div>
@@ -681,6 +714,8 @@ function CatalogScreen({
   cartCount,
   sort,
   setSort,
+  unitMode,
+  setUnitMode,
   viewMode,
   setViewMode,
   brand
@@ -734,6 +769,7 @@ function CatalogScreen({
             ))}
           </select>
         </label>
+        <UnitModeSwitcher value={unitMode} onChange={setUnitMode} className="catalog-unit-switcher" />
         <div className="view-toggle" role="group" aria-label="Вид каталога">
           <button
             type="button"
@@ -766,6 +802,7 @@ function CatalogScreen({
             product={product}
             onOpen={onOpen}
             viewMode={viewMode}
+            unitMode={unitMode}
           />
         ))}
       </div>
@@ -1281,7 +1318,13 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
   );
 }
 
-function ProductScreen({ product, setView, onAdd, cartCount, brand }) {
+function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitMode = 'm2' }) {
+  const [detailUnitMode, setDetailUnitMode] = useState(catalogUnitMode);
+
+  useEffect(() => {
+    setDetailUnitMode(catalogUnitMode);
+  }, [catalogUnitMode, product?.externalId]);
+
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   return (
@@ -1294,7 +1337,7 @@ function ProductScreen({ product, setView, onAdd, cartCount, brand }) {
       <section className="detail-purchase">
         <div>
           <span>Цена</span>
-          <UnitPriceDisplay product={product} variant="detail" />
+          <UnitPriceDisplay product={product} variant="detail" unit={detailUnitMode} onUnitChange={setDetailUnitMode} />
           <small>{product.available ? 'В наличии' : 'Под заказ'} · SKU {product.sku}</small>
         </div>
         <b className={product.available ? 'detail-stock in-stock' : 'detail-stock'}>{product.available ? 'В наличии' : 'Под заказ'}</b>
@@ -1651,6 +1694,7 @@ function App() {
   const [loadMoreError, setLoadMoreError] = useState('');
   const [sort, setSort] = useState('default');
   const [catalogViewMode, setCatalogViewMode] = useState(loadCatalogViewMode);
+  const [catalogUnitMode, setCatalogUnitMode] = useState(loadCatalogUnitMode);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState(loadCart());
   const [me, setMe] = useState(null);
@@ -1686,6 +1730,14 @@ function App() {
       // localStorage can be unavailable in restricted webviews.
     }
   }, [catalogViewMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CATALOG_UNIT_MODE_KEY, catalogUnitMode);
+    } catch {
+      // localStorage can be unavailable in restricted webviews.
+    }
+  }, [catalogUnitMode]);
 
   useEffect(() => {
     filtersOpenRef.current = filtersOpen;
@@ -1798,8 +1850,8 @@ function App() {
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} brand={brand} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
-      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} unitMode={catalogUnitMode} setUnitMode={setCatalogUnitMode} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
+      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} catalogUnitMode={catalogUnitMode} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} cartCount={cartCount} brand={brand} />}
