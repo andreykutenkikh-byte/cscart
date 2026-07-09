@@ -1454,14 +1454,19 @@ function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitM
           <h1 className="page-title detail-title">{displayName}</h1>
           <div className="detail-meta">{getProductMeta(product) || (product.breadcrumb || []).map((item) => item.name).slice(-1)[0] || 'Каталог ДВ Керамик'}</div>
         </div>
-        {onToggleFavorite ? (
-          <FavoriteButton
-            active={isFavorite}
-            pending={favoritePending}
-            onClick={() => onToggleFavorite(product)}
-            className="detail-favorite"
-          />
-        ) : null}
+        <div className="detail-actions">
+          <button className="detail-cart-button" type="button" onClick={() => onAdd(product)} aria-label="Добавить в корзину" title="Добавить в корзину">
+            <ShoppingCart size={18} />
+          </button>
+          {onToggleFavorite ? (
+            <FavoriteButton
+              active={isFavorite}
+              pending={favoritePending}
+              onClick={() => onToggleFavorite(product)}
+              className="detail-favorite"
+            />
+          ) : null}
+        </div>
       </div>
       <section className="detail-purchase">
         <div>
@@ -1479,10 +1484,11 @@ function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitM
           <div key={name}><span>{name}</span><b>{Array.isArray(value) ? value.join(', ') : value}</b></div>
         ))}
       </section>
-      <div className="detail-cta">
-        <button className="primary full" onClick={() => onAdd(product)}>Добавить в корзину</button>
-        {product.productUrl ? <a className="source-link" href={product.productUrl} target="_blank" rel="noreferrer">Открыть на сайте</a> : null}
-      </div>
+      {product.productUrl ? (
+        <div className="detail-cta">
+          <a className="source-link" href={product.productUrl} target="_blank" rel="noreferrer">Открыть на сайте</a>
+        </div>
+      ) : null}
     </main>
   );
 }
