@@ -1009,14 +1009,15 @@ button {
   min-width: 0;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   margin: -4px 0 14px;
 }
 
 .catalog-sort {
   display: grid;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 112px;
+  max-width: 138px;
   gap: 5px;
 }
 
@@ -1028,15 +1029,24 @@ button {
 
 .catalog-sort select {
   width: 100%;
-  min-height: 38px;
-  padding: 7px 32px 7px 12px;
+  min-height: 36px;
+  padding: 7px 26px 7px 10px;
   border: 1px solid var(--color-border);
   border-radius: 14px;
   outline: 0;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 760;
+  text-overflow: ellipsis;
+}
+
+.catalog-unit-switcher {
+  flex: 0 0 auto;
+}
+
+.catalog-unit-switcher button {
+  min-height: 30px;
 }
 
 .view-toggle {
