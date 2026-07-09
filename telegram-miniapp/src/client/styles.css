@@ -1008,7 +1008,7 @@ button {
   display: flex;
   min-width: 0;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   margin: -4px 0 14px;
 }
@@ -1016,8 +1016,7 @@ button {
 .catalog-sort {
   display: grid;
   min-width: 0;
-  flex: 1 1 112px;
-  max-width: 138px;
+  flex: 1 1 auto;
   gap: 5px;
 }
 
@@ -1043,10 +1042,12 @@ button {
 
 .catalog-unit-switcher {
   flex: 0 0 auto;
+  border-radius: 16px;
 }
 
 .catalog-unit-switcher button {
   min-height: 30px;
+  border-radius: 12px;
 }
 
 .view-toggle {
