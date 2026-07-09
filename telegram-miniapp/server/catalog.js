@@ -286,7 +286,7 @@ function decorateImage(image) {
   };
 }
 
-function summarizeProduct(row) {
+export function summarizeProduct(row) {
   const primaryImage = decorateImage({
     id: row.image_id,
     remote_url: row.image_remote_url,
