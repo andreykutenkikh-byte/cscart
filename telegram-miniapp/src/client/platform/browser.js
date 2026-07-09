@@ -1,3 +1,5 @@
+import { installSafeAreaBridge } from './safe-area.js';
+
 const DEV_USER_KEY = 'dvk_dev_user_id';
 
 function getDevUserId() {
@@ -11,6 +13,8 @@ function getDevUserId() {
 
 export function createBrowserPlatform() {
   const id = getDevUserId();
+  installSafeAreaBridge();
+
   return {
     name: 'browser',
     initData: '',

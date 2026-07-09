@@ -299,6 +299,14 @@ curl http://localhost:3001/api/catalog/facets
 
 The frontend loads `https://telegram.org/js/telegram-web-app.js`. When opened inside Telegram, it sends `x-telegram-init-data` to the API. If `TELEGRAM_BOT_TOKEN` is present, the server verifies initData. Outside Telegram, the browser adapter creates a local dev user id and sends `x-dev-telegram-user-id`, so the MVP remains usable in a normal browser.
 
+### Telegram Safe Area
+
+The frontend bridges Telegram Mini App viewport and safe-area values into CSS variables. In Telegram, `safeAreaInset`, `contentSafeAreaInset`, `viewportHeight`, and `viewportStableHeight` are copied to `--tg-safe-*`, `--tg-content-safe-*`, `--tg-viewport-height`, and `--tg-viewport-stable-height`. Layout uses `--app-safe-top`, `--app-safe-bottom`, `--app-safe-left`, `--app-safe-right`, and `--app-viewport-height`.
+
+The bridge updates on startup, after `Telegram.WebApp.ready()` / `expand()`, window resize/orientation changes, and Telegram events: `viewportChanged`, `safeAreaChanged`, `contentSafeAreaChanged`, and `fullscreenChanged`.
+
+Browser fallback keeps the same variables backed by CSS `env(safe-area-inset-*)` and `100dvh`. To smoke-test overlap handling outside Telegram, temporarily set CSS variables in DevTools or Playwright, for example `--tg-content-safe-top: 64px` and `--tg-safe-bottom: 24px`, then open filters, product detail, image viewer, and bottom navigation.
+
 ## Known MVP Limits
 
 - No online payment.
