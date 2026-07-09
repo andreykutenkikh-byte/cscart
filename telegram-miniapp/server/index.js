@@ -10,6 +10,14 @@ import { getAdminOrders, getAdminSettings, getAdminVisitors, getMe, getPublicApp
 import { recordVisit } from './visits.js';
 import { serveCachedImage } from './media.js';
 import { serveCachedBannerImage } from './banners.js';
+import {
+  addFavoriteProduct,
+  clearViewedProducts,
+  getFavoriteProducts,
+  getViewedProducts,
+  recordViewedProduct,
+  removeFavoriteProduct
+} from './personalization.js';
 
 dotenv.config();
 
@@ -84,6 +92,30 @@ app.get('/api/catalog/facets', asyncRoute(async (req, res) => {
 
 app.get('/api/media/image/:imageId/:variant', asyncRoute(serveCachedImage));
 app.get('/api/media/banner/:bannerId/:variant', asyncRoute(serveCachedBannerImage));
+
+app.get('/api/favorites', asyncRoute(async (req, res) => {
+  res.json({ products: await getFavoriteProducts(req) });
+}));
+
+app.post('/api/favorites/:productId', asyncRoute(async (req, res) => {
+  res.status(201).json({ product: await addFavoriteProduct(req, req.params.productId) });
+}));
+
+app.delete('/api/favorites/:productId', asyncRoute(async (req, res) => {
+  res.json(await removeFavoriteProduct(req, req.params.productId));
+}));
+
+app.get('/api/viewed-products', asyncRoute(async (req, res) => {
+  res.json({ products: await getViewedProducts(req) });
+}));
+
+app.post('/api/viewed-products/:productId', asyncRoute(async (req, res) => {
+  res.status(201).json({ product: await recordViewedProduct(req, req.params.productId) });
+}));
+
+app.delete('/api/viewed-products', asyncRoute(async (req, res) => {
+  res.json(await clearViewedProducts(req));
+}));
 
 app.post('/api/orders', asyncRoute(async (req, res) => {
   const result = await createOrder(req);

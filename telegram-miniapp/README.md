@@ -299,6 +299,26 @@ curl http://localhost:3001/api/catalog/facets
 
 The frontend loads `https://telegram.org/js/telegram-web-app.js`. When opened inside Telegram, it sends `x-telegram-init-data` to the API. If `TELEGRAM_BOT_TOKEN` is present, the server verifies initData. Outside Telegram, the browser adapter creates a local dev user id and sends `x-dev-telegram-user-id`, so the MVP remains usable in a normal browser.
 
+### Favorites, Viewed Products, and Cabinet
+
+The regular user area is the `Кабинет` bottom tab. It contains `Мои заявки`, `Избранное`, and `Просмотренные`; admin users also see an `Админ-панель` block that links to the existing settings, visitors, orders/leads, and import tools. Regular users do not see this admin block, and admin API access is still enforced server-side.
+
+Telegram users get server-side persistence through PostgreSQL tables from `006_favorites_viewed_products.sql`:
+
+- `favorite_products`: one row per Telegram user/product, with a unique `(telegram_user_id, product_id)` constraint.
+- `viewed_products`: one row per Telegram user/product, with `viewed_count`, `first_viewed_at`, and `last_viewed_at`.
+
+Personal API endpoints:
+
+- `GET /api/favorites`
+- `POST /api/favorites/:productId`
+- `DELETE /api/favorites/:productId`
+- `GET /api/viewed-products`
+- `POST /api/viewed-products/:productId`
+- `DELETE /api/viewed-products`
+
+These endpoints identify the user from Telegram initData via the existing platform headers; the client cannot pass an arbitrary Telegram user id. In normal browser fallback mode, favorites and viewed products are local-only and stored in `localStorage` keys `dvkeramik.favorites` and `dvkeramik.viewedProducts`.
+
 ### Telegram Safe Area
 
 The frontend bridges Telegram Mini App viewport and safe-area values into CSS variables. In Telegram, `safeAreaInset`, `contentSafeAreaInset`, `viewportHeight`, and `viewportStableHeight` are copied to `--tg-safe-*`, `--tg-content-safe-*`, `--tg-viewport-height`, and `--tg-viewport-stable-height`. Layout uses `--app-safe-top`, `--app-safe-bottom`, `--app-safe-left`, `--app-safe-right`, and `--app-viewport-height`.

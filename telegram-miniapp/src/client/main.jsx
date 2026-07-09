@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home, LayoutGrid, List as ListIcon, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X, Plus, Minus } from 'lucide-react';
-import { apiGet, apiPost } from './api.js';
+import { Home, LayoutGrid, List as ListIcon, ShoppingCart, ClipboardList, Search, SlidersHorizontal, ChevronLeft, ChevronRight, ArrowLeft, X, Plus, Minus, Heart, UserRound, Eye } from 'lucide-react';
+import { apiDelete, apiGet, apiPost } from './api.js';
 import { addToCart, clearCart, getCartItems, getCartTotal, loadCart, saveCart, updateQuantity } from './cart.js';
 import { getPlatform } from './platform/index.js';
 import './styles.css';
@@ -10,6 +10,8 @@ const platform = getPlatform();
 const CATALOG_PAGE_LIMIT = 24;
 const CATALOG_VIEW_MODE_KEY = 'dvkeramik.catalog.viewMode';
 const CATALOG_UNIT_MODE_KEY = 'dvkeramik.catalogUnitMode';
+const FAVORITES_STORAGE_KEY = 'dvkeramik.favorites';
+const VIEWED_PRODUCTS_STORAGE_KEY = 'dvkeramik.viewedProducts';
 
 const SORT_OPTIONS = [
   { value: 'default', label: 'По умолч.' },
@@ -90,6 +92,66 @@ function formatDisplayTitle(name = '') {
     const lower = word.toLocaleLowerCase('ru-RU');
     return `${lower.charAt(0).toLocaleUpperCase('ru-RU')}${lower.slice(1)}`;
   });
+}
+
+function getProductKey(product) {
+  return String(product?.id || product?.externalId || product?.sku || '').trim();
+}
+
+function compactProduct(product) {
+  if (!product) return null;
+  return {
+    id: product.id,
+    externalId: product.externalId,
+    sku: product.sku,
+    categoryExternalId: product.categoryExternalId,
+    name: product.name,
+    description: product.description,
+    slug: product.slug,
+    productUrl: product.productUrl,
+    price: product.price,
+    currencyId: product.currencyId,
+    available: product.available,
+    imageUrl: product.imageUrl,
+    remoteImageUrl: product.remoteImageUrl,
+    thumbnailUrl: product.thumbnailUrl,
+    listImageUrl: product.listImageUrl,
+    primaryImage: product.primaryImage,
+    params: product.params,
+    unitPricing: product.unitPricing,
+    viewedCount: product.viewedCount,
+    lastViewedAt: product.lastViewedAt,
+    favoriteCreatedAt: product.favoriteCreatedAt
+  };
+}
+
+function addOrReplaceProduct(items, product, timestampKey = null) {
+  const compact = compactProduct(product);
+  const key = getProductKey(compact);
+  if (!key) return items;
+  const nextProduct = timestampKey ? { ...compact, [timestampKey]: compact[timestampKey] || new Date().toISOString() } : compact;
+  return [nextProduct, ...items.filter((item) => getProductKey(item) !== key)];
+}
+
+function removeProductByKey(items, key) {
+  return items.filter((item) => getProductKey(item) !== key);
+}
+
+function readStoredProducts(storageKey) {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredProducts(storageKey, products, limit = 100) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(products.slice(0, limit)));
+  } catch {
+    // localStorage can be unavailable in restricted webviews.
+  }
 }
 
 function getProductImages(product) {
@@ -323,6 +385,10 @@ function useDebouncedValue(value, delay = 300) {
 
 function initialViewFromPath() {
   const path = window.location.pathname;
+  if (path === '/cabinet/orders') return 'orders';
+  if (path === '/cabinet/favorites') return 'cabinetFavorites';
+  if (path === '/cabinet/viewed') return 'cabinetViewed';
+  if (path === '/cabinet') return 'cabinet';
   if (path === '/admin/settings') return 'adminSettings';
   if (path === '/admin/visitors') return 'adminVisitors';
   if (path === '/admin/orders') return 'adminOrders';
@@ -475,7 +541,27 @@ function UnitPriceDisplay({ product, variant = 'card', unit: controlledUnit, onU
   );
 }
 
-function ProductCard({ product, onOpen, viewMode = 'list', unitMode = 'm2' }) {
+function FavoriteButton({ active, pending, onClick, className = '' }) {
+  const label = active ? 'Убрать из избранного' : 'Добавить в избранное';
+  return (
+    <button
+      type="button"
+      className={`favorite-button ${active ? 'active' : ''} ${pending ? 'pending' : ''} ${className}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick?.(event);
+      }}
+      disabled={pending}
+      aria-label={label}
+      title={label}
+    >
+      <Heart size={18} fill={active ? 'currentColor' : 'none'} />
+    </button>
+  );
+}
+
+function ProductCard({ product, onOpen, viewMode = 'list', unitMode = 'm2', isFavorite = false, favoritePending = false, onToggleFavorite }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   const cardImageFallback = product.remoteImageUrl || product.imageUrl;
@@ -490,6 +576,14 @@ function ProductCard({ product, onOpen, viewMode = 'list', unitMode = 'm2' }) {
 
   return (
     <article className={`product-card ${modeClass}`}>
+      {onToggleFavorite ? (
+        <FavoriteButton
+          active={isFavorite}
+          pending={favoritePending}
+          onClick={() => onToggleFavorite(product)}
+          className="product-card__favorite"
+        />
+      ) : null}
       <div className="product-card__open" role="button" tabIndex={0} onClick={openProduct} onKeyDown={handleOpenKeyDown}>
         <div className="product-card__image">
           <ProductImage src={product.listImageUrl || product.thumbnailUrl || cardImageFallback} fallbackSrc={cardImageFallback} alt={product.name} />
@@ -507,19 +601,18 @@ function ProductCard({ product, onOpen, viewMode = 'list', unitMode = 'm2' }) {
   );
 }
 
-function BottomNav({ view, setView, cartCount, showOrders }) {
+function BottomNav({ view, setView, cartCount }) {
   const items = [
     ['home', 'Главная', Home],
     ['catalogMenu', 'Каталог', LayoutGrid],
-    ['cart', 'Корзина', ShoppingCart]
+    ['cart', 'Корзина', ShoppingCart],
+    ['cabinet', 'Кабинет', UserRound]
   ];
-  if (showOrders) {
-    items.push(['orders', 'Заявки', ClipboardList]);
-  }
+  const cabinetViews = new Set(['cabinet', 'orders', 'cabinetFavorites', 'cabinetViewed', 'admin', 'adminSettings', 'adminVisitors', 'adminOrders']);
   return (
     <nav className="bottom-nav" style={{ '--nav-count': items.length }}>
       {items.map(([id, label, Icon]) => (
-        <button key={id} className={view === id || (id === 'catalogMenu' && view === 'catalog') ? 'active' : ''} onClick={() => setView(id)}>
+        <button key={id} className={view === id || (id === 'catalogMenu' && view === 'catalog') || (id === 'cabinet' && cabinetViews.has(view)) ? 'active' : ''} onClick={() => setView(id)}>
           <Icon size={20} />
           <span>{label}</span>
           {id === 'cart' && cartCount > 0 ? <b>{cartCount}</b> : null}
@@ -596,7 +689,7 @@ function HomeBannerCarousel({ banners = [] }) {
   );
 }
 
-function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, cartCount, brand, homeBanners, loading }) {
+function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, cartCount, brand, homeBanners, loading, favoriteIds, favoritePendingIds, onToggleFavorite }) {
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
   const visibleProducts = products.filter(Boolean);
@@ -635,7 +728,16 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
           {loading ? <div className="empty">Ищем товары...</div> : null}
           {!loading && !visibleProducts.length ? <div className="empty">Ничего не найдено</div> : null}
           <div className="product-list product-list--list">
-            {!loading ? visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />) : null}
+            {!loading ? visibleProducts.map((product) => (
+              <ProductCard
+                key={product.externalId}
+                product={product}
+                onOpen={onOpen}
+                isFavorite={favoriteIds.has(getProductKey(product))}
+                favoritePending={favoritePendingIds.has(getProductKey(product))}
+                onToggleFavorite={onToggleFavorite}
+              />
+            )) : null}
           </div>
         </section>
       ) : (
@@ -684,7 +786,16 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
       <section>
         <div className="section-title"><h2>Популярное из offers</h2><button onClick={() => setView('catalog')}>Все</button></div>
         <div className="product-list">
-          {visibleProducts.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />)}
+          {visibleProducts.slice(0, 6).map((product) => (
+            <ProductCard
+              key={product.externalId}
+              product={product}
+              onOpen={onOpen}
+              isFavorite={favoriteIds.has(getProductKey(product))}
+              favoritePending={favoritePendingIds.has(getProductKey(product))}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
         </div>
       </section>
         </>
@@ -718,7 +829,10 @@ function CatalogScreen({
   setUnitMode,
   viewMode,
   setViewMode,
-  brand
+  brand,
+  favoriteIds,
+  favoritePendingIds,
+  onToggleFavorite
 }) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
@@ -803,6 +917,9 @@ function CatalogScreen({
             onOpen={onOpen}
             viewMode={viewMode}
             unitMode={unitMode}
+            isFavorite={favoriteIds.has(getProductKey(product))}
+            favoritePending={favoritePendingIds.has(getProductKey(product))}
+            onToggleFavorite={onToggleFavorite}
           />
         ))}
       </div>
@@ -1318,7 +1435,7 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
   );
 }
 
-function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitMode = 'm2' }) {
+function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitMode = 'm2', isFavorite = false, favoritePending = false, onToggleFavorite }) {
   const [detailUnitMode, setDetailUnitMode] = useState(catalogUnitMode);
 
   useEffect(() => {
@@ -1332,8 +1449,20 @@ function ProductScreen({ product, setView, onAdd, cartCount, brand, catalogUnitM
       <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
       <ProductGallery product={product} />
-      <h1 className="page-title detail-title">{displayName}</h1>
-      <div className="detail-meta">{getProductMeta(product) || (product.breadcrumb || []).map((item) => item.name).slice(-1)[0] || 'Каталог ДВ Керамик'}</div>
+      <div className="detail-title-row">
+        <div>
+          <h1 className="page-title detail-title">{displayName}</h1>
+          <div className="detail-meta">{getProductMeta(product) || (product.breadcrumb || []).map((item) => item.name).slice(-1)[0] || 'Каталог ДВ Керамик'}</div>
+        </div>
+        {onToggleFavorite ? (
+          <FavoriteButton
+            active={isFavorite}
+            pending={favoritePending}
+            onClick={() => onToggleFavorite(product)}
+            className="detail-favorite"
+          />
+        ) : null}
+      </div>
       <section className="detail-purchase">
         <div>
           <span>Цена</span>
@@ -1458,8 +1587,8 @@ function OrdersScreen({ platform, me, setView, cartCount, brand }) {
   return (
     <main className="screen">
       <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
-      {me?.isAdmin ? <AdminEntry setView={setView} /> : null}
-      <h1 className="page-title">Заявки</h1>
+      <button className="back-button" onClick={() => setView('cabinet')}><ArrowLeft size={18} /> Кабинет</button>
+      <h1 className="page-title">Мои заявки</h1>
       {loading ? <div className="empty">Загружаем...</div> : null}
       {!loading && !orders.length ? <div className="empty">Здесь появятся ваши последние заявки</div> : null}
       <div className="orders-list">
@@ -1476,6 +1605,205 @@ function OrdersScreen({ platform, me, setView, cartCount, brand }) {
   );
 }
 
+function userDisplayName(me, platform) {
+  const user = me?.user || platform.user || {};
+  return [user.firstName, user.lastName].filter(Boolean).join(' ')
+    || (user.username ? `@${user.username}` : '')
+    || 'Покупатель';
+}
+
+function CabinetSectionButton({ icon: Icon, title, subtitle, count, onClick }) {
+  return (
+    <button className="cabinet-card" type="button" onClick={onClick}>
+      <span className="cabinet-card__icon"><Icon size={18} /></span>
+      <span className="cabinet-card__copy">
+        <strong>{title}</strong>
+        <small>{subtitle}</small>
+      </span>
+      <b>{count}</b>
+      <ChevronRight size={16} />
+    </button>
+  );
+}
+
+function CabinetPreviewProducts({ products, onOpen, favoriteIds, favoritePendingIds, onToggleFavorite, emptyText }) {
+  if (!products.length) return <div className="empty compact">{emptyText}</div>;
+  return (
+    <div className="product-list product-list--list cabinet-preview-list">
+      {products.slice(0, 3).map((product) => (
+        <ProductCard
+          key={getProductKey(product)}
+          product={product}
+          onOpen={onOpen}
+          isFavorite={favoriteIds.has(getProductKey(product))}
+          favoritePending={favoritePendingIds.has(getProductKey(product))}
+          onToggleFavorite={onToggleFavorite}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CabinetScreen({
+  platform,
+  me,
+  setView,
+  cartCount,
+  brand,
+  favoriteProducts,
+  viewedProducts,
+  onOpen,
+  favoriteIds,
+  favoritePendingIds,
+  onToggleFavorite
+}) {
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    apiGet('/api/orders', {}, platform)
+      .then((data) => { if (alive) setOrders(data.orders || []); })
+      .catch(() => { if (alive) setOrders([]); })
+      .finally(() => { if (alive) setLoadingOrders(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const displayName = userDisplayName(me, platform);
+  const username = me?.user?.username || platform.user?.username;
+
+  return (
+    <main className="screen cabinet-screen">
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
+      <section className="cabinet-identity">
+        <span className="cabinet-avatar"><UserRound size={22} /></span>
+        <div>
+          <h1>Кабинет</h1>
+          <strong>{displayName}</strong>
+          <small>{username ? `@${username}` : 'Личный раздел покупателя'}</small>
+        </div>
+      </section>
+
+      <section className="cabinet-grid">
+        <CabinetSectionButton icon={ClipboardList} title="Мои заявки" subtitle="История обращений менеджеру" count={orders.length} onClick={() => setView('orders')} />
+        <CabinetSectionButton icon={Heart} title="Избранное" subtitle="Товары, которые хочется сохранить" count={favoriteProducts.length} onClick={() => setView('cabinetFavorites')} />
+        <CabinetSectionButton icon={Eye} title="Просмотренные" subtitle="Недавно открытые товары" count={viewedProducts.length} onClick={() => setView('cabinetViewed')} />
+      </section>
+
+      {me?.isAdmin ? <AdminEntry setView={setView} /> : null}
+
+      <section>
+        <div className="section-title">
+          <h2>Последние заявки</h2>
+          <button type="button" onClick={() => setView('orders')}>Все</button>
+        </div>
+        {loadingOrders ? <div className="empty compact">Загружаем заявки...</div> : null}
+        {!loadingOrders && !orders.length ? <div className="empty compact">Здесь появятся ваши последние заявки</div> : null}
+        <div className="orders-list cabinet-orders-preview">
+          {orders.slice(0, 2).map((order) => (
+            <article className="order-card" key={order.id}>
+              <strong>Заявка #{order.id.slice(0, 8)}</strong>
+              <span>{new Date(order.createdAt).toLocaleString('ru-RU')} · {formatOrderStatus(order.status)}</span>
+              <p>{order.items.map((item) => `${item.productName} x${item.quantity}`).join(', ')}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="section-title">
+          <h2>Избранное</h2>
+          <button type="button" onClick={() => setView('cabinetFavorites')}>Все</button>
+        </div>
+        <CabinetPreviewProducts
+          products={favoriteProducts}
+          onOpen={onOpen}
+          favoriteIds={favoriteIds}
+          favoritePendingIds={favoritePendingIds}
+          onToggleFavorite={onToggleFavorite}
+          emptyText="В избранном пока пусто"
+        />
+      </section>
+
+      <section>
+        <div className="section-title">
+          <h2>Просмотренные</h2>
+          <button type="button" onClick={() => setView('cabinetViewed')}>Все</button>
+        </div>
+        <CabinetPreviewProducts
+          products={viewedProducts}
+          onOpen={onOpen}
+          favoriteIds={favoriteIds}
+          favoritePendingIds={favoritePendingIds}
+          onToggleFavorite={onToggleFavorite}
+          emptyText="Вы ещё не смотрели товары"
+        />
+      </section>
+    </main>
+  );
+}
+
+function FavoritesScreen({ products, setView, onOpen, favoriteIds, favoritePendingIds, onToggleFavorite, cartCount, brand }) {
+  return (
+    <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
+      <button className="back-button" onClick={() => setView('cabinet')}><ArrowLeft size={18} /> Кабинет</button>
+      <h1 className="page-title">Избранное</h1>
+      {!products.length ? (
+        <div className="empty empty-state-card">
+          <strong>В избранном пока пусто</strong>
+          <span>Добавляйте товары сердечком, чтобы быстро вернуться к ним</span>
+          <button className="primary" type="button" onClick={() => setView('catalogMenu')}>Открыть каталог</button>
+        </div>
+      ) : null}
+      <div className="product-list product-list--list">
+        {products.map((product) => (
+          <ProductCard
+            key={getProductKey(product)}
+            product={product}
+            onOpen={onOpen}
+            isFavorite={favoriteIds.has(getProductKey(product))}
+            favoritePending={favoritePendingIds.has(getProductKey(product))}
+            onToggleFavorite={onToggleFavorite}
+          />
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function ViewedProductsScreen({ products, setView, onOpen, favoriteIds, favoritePendingIds, onToggleFavorite, onClearViewed, cartCount, brand }) {
+  return (
+    <main className="screen">
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
+      <button className="back-button" onClick={() => setView('cabinet')}><ArrowLeft size={18} /> Кабинет</button>
+      <div className="page-title-row">
+        <h1 className="page-title">Просмотренные</h1>
+        {products.length ? <button type="button" onClick={onClearViewed}>Очистить</button> : null}
+      </div>
+      {!products.length ? (
+        <div className="empty empty-state-card">
+          <strong>Вы ещё не смотрели товары</strong>
+          <span>Откройте карточку товара, и она появится здесь</span>
+          <button className="primary" type="button" onClick={() => setView('catalogMenu')}>Открыть каталог</button>
+        </div>
+      ) : null}
+      <div className="product-list product-list--list">
+        {products.map((product) => (
+          <ProductCard
+            key={getProductKey(product)}
+            product={product}
+            onOpen={onOpen}
+            isFavorite={favoriteIds.has(getProductKey(product))}
+            favoritePending={favoritePendingIds.has(getProductKey(product))}
+            onToggleFavorite={onToggleFavorite}
+          />
+        ))}
+      </div>
+    </main>
+  );
+}
+
 function AdminGuard({ me, setView, children }) {
   if (!me) {
     return <main className="screen"><div className="empty">Проверяем доступ...</div></main>;
@@ -1483,7 +1811,7 @@ function AdminGuard({ me, setView, children }) {
   if (!me.isAdmin) {
     return (
       <main className="screen">
-        <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Назад</button>
+        <button className="back-button" onClick={() => setView('cabinet')}><ArrowLeft size={18} /> Кабинет</button>
         <h1 className="page-title">Админ-панель</h1>
         <div className="empty">Для этого пользователя доступ администратора закрыт.</div>
       </main>
@@ -1500,7 +1828,7 @@ function AdminMenu({ setView }) {
   ];
   return (
     <main className="screen">
-      <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Заявки</button>
+      <button className="back-button" onClick={() => setView('cabinet')}><ArrowLeft size={18} /> Кабинет</button>
       <h1 className="page-title">Админ-панель</h1>
       <div className="admin-grid">
         {items.map(([view, title, description]) => (
@@ -1700,6 +2028,10 @@ function App() {
   const [me, setMe] = useState(null);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [homeBanners, setHomeBanners] = useState([]);
+  const [favoriteProducts, setFavoriteProducts] = useState([]);
+  const [viewedProducts, setViewedProducts] = useState([]);
+  const [favoritePendingIds, setFavoritePendingIds] = useState(() => new Set());
+  const [personalizationStatus, setPersonalizationStatus] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const catalogRequestRef = useRef(0);
   const filtersOpenRef = useRef(false);
@@ -1707,6 +2039,7 @@ function App() {
   const categoriesFlat = useMemo(() => flattenCategories(categories), [categories]);
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const favoriteIds = useMemo(() => new Set(favoriteProducts.map(getProductKey).filter(Boolean)), [favoriteProducts]);
 
   useEffect(() => {
     platform.ready();
@@ -1720,8 +2053,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (platform.name !== 'telegram') {
+      setFavoriteProducts(readStoredProducts(FAVORITES_STORAGE_KEY));
+      setViewedProducts(readStoredProducts(VIEWED_PRODUCTS_STORAGE_KEY));
+      return;
+    }
+
+    apiGet('/api/favorites', {}, platform)
+      .then((data) => setFavoriteProducts(data.products || []))
+      .catch(() => setFavoriteProducts([]));
+    apiGet('/api/viewed-products', {}, platform)
+      .then((data) => setViewedProducts(data.products || []))
+      .catch(() => setViewedProducts([]));
+  }, []);
+
+  useEffect(() => {
     saveCart(cart);
   }, [cart]);
+
+  useEffect(() => {
+    if (platform.name === 'telegram') return;
+    writeStoredProducts(FAVORITES_STORAGE_KEY, favoriteProducts, 100);
+  }, [favoriteProducts]);
+
+  useEffect(() => {
+    if (platform.name === 'telegram') return;
+    writeStoredProducts(VIEWED_PRODUCTS_STORAGE_KEY, viewedProducts, 50);
+  }, [viewedProducts]);
 
   useEffect(() => {
     try {
@@ -1819,10 +2177,83 @@ function App() {
     }
   };
 
+  const updateFavoritePending = (key, pending) => {
+    setFavoritePendingIds((current) => {
+      const next = new Set(current);
+      if (pending) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+
+  const toggleFavorite = async (product) => {
+    const key = getProductKey(product);
+    if (!key || favoritePendingIds.has(key)) return;
+    const wasFavorite = favoriteIds.has(key);
+    const previousFavorites = favoriteProducts;
+    updateFavoritePending(key, true);
+    setPersonalizationStatus('');
+
+    if (wasFavorite) {
+      setFavoriteProducts((current) => removeProductByKey(current, key));
+    } else {
+      setFavoriteProducts((current) => addOrReplaceProduct(current, { ...product, favoriteCreatedAt: new Date().toISOString() }, 'favoriteCreatedAt'));
+    }
+
+    try {
+      if (platform.name === 'telegram') {
+        if (wasFavorite) {
+          await apiDelete(`/api/favorites/${encodeURIComponent(key)}`, platform);
+        } else {
+          const data = await apiPost(`/api/favorites/${encodeURIComponent(key)}`, {}, platform);
+          if (data.product) {
+            setFavoriteProducts((current) => addOrReplaceProduct(removeProductByKey(current, key), data.product, 'favoriteCreatedAt'));
+          }
+        }
+      }
+    } catch (error) {
+      setFavoriteProducts(previousFavorites);
+      setPersonalizationStatus(error.message || 'Не удалось обновить избранное');
+    } finally {
+      updateFavoritePending(key, false);
+    }
+  };
+
+  const recordViewedProduct = (product) => {
+    const key = getProductKey(product);
+    if (!key) return;
+    const viewedProduct = { ...product, lastViewedAt: new Date().toISOString(), viewedCount: Number(product.viewedCount || 0) + 1 };
+    setViewedProducts((current) => addOrReplaceProduct(current, viewedProduct, 'lastViewedAt').slice(0, 50));
+
+    if (platform.name === 'telegram') {
+      apiPost(`/api/viewed-products/${encodeURIComponent(key)}`, {}, platform)
+        .then((data) => {
+          if (data.product) {
+            setViewedProducts((current) => addOrReplaceProduct(removeProductByKey(current, key), data.product, 'lastViewedAt').slice(0, 50));
+          }
+        })
+        .catch(() => {});
+    }
+  };
+
+  const clearViewedProducts = async () => {
+    const previousViewed = viewedProducts;
+    setViewedProducts([]);
+    try {
+      if (platform.name === 'telegram') {
+        await apiDelete('/api/viewed-products', platform);
+      }
+    } catch (error) {
+      setViewedProducts(previousViewed);
+      setPersonalizationStatus(error.message || 'Не удалось очистить историю');
+    }
+  };
+
   const openProduct = async (product) => {
     const detail = await apiGet(`/api/catalog/products/${encodeURIComponent(product.externalId)}`);
     setSelectedProduct(detail.product);
     setView('product');
+    recordViewedProduct(detail.product);
   };
 
   const onAdd = (product) => {
@@ -1830,7 +2261,6 @@ function App() {
   };
 
   const cartCount = getCartItems(cart).reduce((sum, item) => sum + item.quantity, 0);
-  const showOrdersNav = platform.name === 'telegram' && Boolean(me?.isAdmin);
   const selectedFiltersCount = countSelectedFilters(filters);
   const openFilters = () => {
     if (!filtersOpenRef.current) {
@@ -1848,12 +2278,15 @@ function App() {
 
   return (
     <div className="app-shell">
-      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} />}
+      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} favoriteIds={favoriteIds} favoritePendingIds={favoritePendingIds} onToggleFavorite={toggleFavorite} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} brand={brand} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} unitMode={catalogUnitMode} setUnitMode={setCatalogUnitMode} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
-      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} catalogUnitMode={catalogUnitMode} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} unitMode={catalogUnitMode} setUnitMode={setCatalogUnitMode} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} favoriteIds={favoriteIds} favoritePendingIds={favoritePendingIds} onToggleFavorite={toggleFavorite} />}
+      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} catalogUnitMode={catalogUnitMode} isFavorite={favoriteIds.has(getProductKey(selectedProduct))} favoritePending={favoritePendingIds.has(getProductKey(selectedProduct))} onToggleFavorite={toggleFavorite} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
+      {view === 'cabinet' && <CabinetScreen platform={platform} me={me} setView={setView} cartCount={cartCount} brand={brand} favoriteProducts={favoriteProducts} viewedProducts={viewedProducts} onOpen={openProduct} favoriteIds={favoriteIds} favoritePendingIds={favoritePendingIds} onToggleFavorite={toggleFavorite} />}
+      {view === 'cabinetFavorites' && <FavoritesScreen products={favoriteProducts} setView={setView} onOpen={openProduct} favoriteIds={favoriteIds} favoritePendingIds={favoritePendingIds} onToggleFavorite={toggleFavorite} cartCount={cartCount} brand={brand} />}
+      {view === 'cabinetViewed' && <ViewedProductsScreen products={viewedProducts} setView={setView} onOpen={openProduct} favoriteIds={favoriteIds} favoritePendingIds={favoritePendingIds} onToggleFavorite={toggleFavorite} onClearViewed={clearViewedProducts} cartCount={cartCount} brand={brand} />}
       {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'admin' && <AdminGuard me={me} setView={setView}><AdminMenu setView={setView} /></AdminGuard>}
       {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} onBrandChange={setBrand} /></AdminGuard>}
@@ -1861,7 +2294,8 @@ function App() {
       {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'catalog' ? <FloatingFilterButton onClick={openFilters} count={selectedFiltersCount} /> : null}
       <FiltersSheet open={filtersOpen} facets={facets} filters={filters} setFilters={setFilters} onClose={closeFilters} />
-      <BottomNav view={view} setView={setView} cartCount={cartCount} showOrders={showOrdersNav} />
+      {personalizationStatus ? <div className="toast-status">{personalizationStatus}</div> : null}
+      <BottomNav view={view} setView={setView} cartCount={cartCount} />
     </div>
   );
 }
