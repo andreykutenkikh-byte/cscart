@@ -6,9 +6,10 @@ import { pool, query } from './db.js';
 import { getCategories, getFacets, getProductDetail, getProducts } from './catalog.js';
 import { createOrder, getOrders } from './orders.js';
 import { importDvKeramikFeed } from './importer.js';
-import { getAdminOrders, getAdminSettings, getAdminVisitors, getMe, requireAdmin, runAdminImportNow } from './admin.js';
+import { getAdminOrders, getAdminSettings, getAdminVisitors, getMe, getPublicAppSettings, requireAdmin, runAdminImportNow, updateAdminBrandSettings } from './admin.js';
 import { recordVisit } from './visits.js';
 import { serveCachedImage } from './media.js';
+import { serveCachedBannerImage } from './banners.js';
 
 dotenv.config();
 
@@ -41,6 +42,10 @@ app.get('/api/health', asyncRoute(async (req, res) => {
 
 app.get('/api/me', asyncRoute(async (req, res) => {
   res.json(getMe(req));
+}));
+
+app.get('/api/app/settings', asyncRoute(async (req, res) => {
+  res.json({ settings: await getPublicAppSettings() });
 }));
 
 app.post('/api/visits', asyncRoute(async (req, res) => {
@@ -78,6 +83,7 @@ app.get('/api/catalog/facets', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/media/image/:imageId/:variant', asyncRoute(serveCachedImage));
+app.get('/api/media/banner/:bannerId/:variant', asyncRoute(serveCachedBannerImage));
 
 app.post('/api/orders', asyncRoute(async (req, res) => {
   const result = await createOrder(req);
@@ -103,6 +109,11 @@ app.get('/api/admin/me', asyncRoute(async (req, res) => {
 app.get('/api/admin/settings', asyncRoute(async (req, res) => {
   requireAdmin(req);
   res.json({ settings: await getAdminSettings() });
+}));
+
+app.post('/api/admin/settings/brand', asyncRoute(async (req, res) => {
+  requireAdmin(req);
+  res.json({ brand: await updateAdminBrandSettings(req.body?.brand || {}) });
 }));
 
 app.get('/api/admin/visitors', asyncRoute(async (req, res) => {

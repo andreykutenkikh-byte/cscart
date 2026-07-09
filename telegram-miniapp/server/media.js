@@ -15,12 +15,14 @@ const appRoot = path.resolve(__dirname, '..');
 const DEFAULT_CACHE_DIR = path.join(appRoot, '.cache', 'images');
 const DEFAULT_ALLOWED_HOSTS = ['dvkeramik.ru', 'www.dvkeramik.ru'];
 const VARIANT_ENV = {
+  banner: 'IMAGE_CACHE_BANNER_WIDTH',
   thumb: 'IMAGE_CACHE_THUMB_WIDTH',
   list: 'IMAGE_CACHE_LIST_WIDTH',
   detail: 'IMAGE_CACHE_DETAIL_WIDTH',
   viewer: 'IMAGE_CACHE_VIEWER_WIDTH'
 };
 const DEFAULT_VARIANT_WIDTHS = {
+  banner: 900,
   thumb: 160,
   list: 360,
   detail: 1200,
@@ -358,7 +360,7 @@ async function getImageById(imageId) {
   return result.rows[0] || null;
 }
 
-async function sendCachedFile(req, res, cachePath) {
+export async function sendCachedFile(req, res, cachePath) {
   const stat = await fs.stat(cachePath);
   const etag = `"${hashValue(`${cachePath}:${stat.size}:${stat.mtimeMs}`, 32)}"`;
   res.set({

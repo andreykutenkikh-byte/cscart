@@ -19,6 +19,13 @@ const SORT_OPTIONS = [
   { value: 'newest', label: 'Недавно обновленные' }
 ];
 
+const DEFAULT_BRAND = {
+  title: 'ДВ Керамик',
+  subtitle: 'каталог обновляется ежедневно',
+  logoUrl: '',
+  initials: 'ДК'
+};
+
 function loadCatalogViewMode() {
   try {
     const value = window.localStorage.getItem(CATALOG_VIEW_MODE_KEY);
@@ -331,8 +338,18 @@ function initialViewFromPath() {
 }
 
 function formatDateTime(value) {
-  if (!value) return 'not available';
+  if (!value) return 'нет данных';
   return new Date(value).toLocaleString('ru-RU');
+}
+
+function formatOrderStatus(status) {
+  const statuses = {
+    new: 'Новая',
+    processing: 'В работе',
+    done: 'Завершена',
+    canceled: 'Отменена'
+  };
+  return statuses[status] || status || 'нет статуса';
 }
 
 function ProductImage({ src, fallbackSrc, alt, loading = 'lazy' }) {
@@ -353,14 +370,36 @@ function ProductImage({ src, fallbackSrc, alt, loading = 'lazy' }) {
   );
 }
 
-function AppHeader({ cartCount = 0, setView }) {
+function BrandMark({ brand = DEFAULT_BRAND }) {
+  const logoUrl = String(brand.logoUrl || '').trim();
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [logoUrl]);
+
+  if (logoUrl && !failed) {
+    return (
+      <span className="brand-mark brand-mark--image">
+        <img src={logoUrl} alt={brand.title || DEFAULT_BRAND.title} onError={() => setFailed(true)} />
+      </span>
+    );
+  }
+
+  return <span className="brand-mark">{brand.initials || DEFAULT_BRAND.initials}</span>;
+}
+
+function AppHeader({ cartCount = 0, setView, brand = DEFAULT_BRAND }) {
+  const title = brand.title || DEFAULT_BRAND.title;
+  const subtitle = brand.subtitle || DEFAULT_BRAND.subtitle;
+
   return (
     <header className="app-header">
       <button className="brand-lockup" onClick={() => setView('home')} aria-label="На главную">
-        <span className="brand-mark">ДК</span>
+        <BrandMark brand={brand} />
         <span>
-          <strong>ДВ Керамик</strong>
-          <small>каталог обновляется ежедневно</small>
+          <strong>{title}</strong>
+          <small>{subtitle}</small>
         </span>
       </button>
       <button className="header-action" onClick={() => setView('cart')} aria-label="Открыть корзину">
@@ -424,12 +463,81 @@ function BottomNav({ view, setView, cartCount, showOrders }) {
   );
 }
 
-function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, cartCount }) {
+function HomeBannerCarousel({ banners = [] }) {
+  const visibleBanners = banners.filter((banner) => banner?.imageUrl);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef(null);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [visibleBanners.map((banner) => banner.id).join('|')]);
+
+  useEffect(() => {
+    if (visibleBanners.length < 2) return undefined;
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % visibleBanners.length);
+    }, 5500);
+    return () => window.clearInterval(timer);
+  }, [visibleBanners.length]);
+
+  if (!visibleBanners.length) return null;
+
+  const activeBanner = visibleBanners[activeIndex % visibleBanners.length];
+  const goTo = (index) => setActiveIndex((index + visibleBanners.length) % visibleBanners.length);
+  const image = <img src={activeBanner.imageUrl} alt={activeBanner.title || 'Баннер ДВ Керамик'} loading="eager" decoding="async" />;
+  const content = activeBanner.targetUrl ? (
+    <a className="home-banner-frame" href={activeBanner.targetUrl} target="_blank" rel="noreferrer">
+      {image}
+    </a>
+  ) : (
+    <div className="home-banner-frame">{image}</div>
+  );
+
+  return (
+    <section
+      className="home-banners"
+      onTouchStart={(event) => {
+        touchStartX.current = event.touches[0]?.clientX ?? null;
+      }}
+      onTouchEnd={(event) => {
+        if (touchStartX.current === null || visibleBanners.length < 2) return;
+        const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+        touchStartX.current = null;
+        if (Math.abs(delta) < 36) return;
+        goTo(activeIndex + (delta < 0 ? 1 : -1));
+      }}
+    >
+      {content}
+      {visibleBanners.length > 1 ? (
+        <div className="home-banner-dots" aria-label="Баннеры">
+          {visibleBanners.map((banner, index) => (
+            <button
+              key={banner.id}
+              className={index === activeIndex ? 'active' : ''}
+              type="button"
+              onClick={() => goTo(index)}
+              aria-label={`Показать баннер ${index + 1}`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function HomeScreen({ categories, facets, products, search, setSearch, setCategoryId, setFilters, setView, onOpen, cartCount, brand, homeBanners, loading }) {
   const categoryCards = getCategoryCards(categories, facets).slice(0, 4);
   const quickFacets = getQuickFacets(facets).slice(0, 4);
   const visibleProducts = products.filter(Boolean);
+  const isSearchMode = Boolean(search.trim());
   const featuredProduct = visibleProducts.find((product) => product.listImageUrl || product.remoteImageUrl || product.imageUrl) || visibleProducts[0];
   const featuredImageFallback = featuredProduct?.remoteImageUrl || featuredProduct?.imageUrl;
+
+  const handleSearchChange = (event) => {
+    setSearch(event.target.value);
+    setCategoryId('');
+    setFilters({ params: {} });
+  };
 
   const applyQuickFacet = (chip) => {
     if (chip.type === 'availability') {
@@ -442,21 +550,39 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
 
   return (
     <main className="screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <label className="search-box">
         <Search size={18} />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Найти плитку, коллекцию, размер..." />
+        <input value={search} onChange={handleSearchChange} placeholder="Найти плитку, коллекцию, размер..." />
       </label>
-      <section className="hero">
-        <div>
-          <h1>Каталог плитки с актуальными остатками</h1>
-          <p>Категории и фильтры собираются из файла импорта.</p>
-          <button onClick={() => setView('catalogMenu')}>В каталог</button>
-        </div>
-        <div className="hero__media">
-          <ProductImage src={featuredProduct?.listImageUrl || featuredProduct?.thumbnailUrl || featuredImageFallback} fallbackSrc={featuredImageFallback} alt={featuredProduct?.name || 'Плитка'} />
-        </div>
-      </section>
+      {isSearchMode ? (
+        <section>
+          <div className="section-title">
+            <h2>Результаты поиска</h2>
+            {!loading ? <span>{visibleProducts.length} позиций</span> : null}
+          </div>
+          {loading ? <div className="empty">Ищем товары...</div> : null}
+          {!loading && !visibleProducts.length ? <div className="empty">Ничего не найдено</div> : null}
+          <div className="product-list product-list--list">
+            {!loading ? visibleProducts.map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />) : null}
+          </div>
+        </section>
+      ) : (
+        <>
+      {homeBanners?.length ? (
+        <HomeBannerCarousel banners={homeBanners} />
+      ) : (
+        <section className="hero">
+          <div>
+            <h1>Каталог плитки с актуальными остатками</h1>
+            <p>Категории и фильтры собираются из файла импорта.</p>
+            <button onClick={() => setView('catalogMenu')}>В каталог</button>
+          </div>
+          <div className="hero__media">
+            <ProductImage src={featuredProduct?.listImageUrl || featuredProduct?.thumbnailUrl || featuredImageFallback} fallbackSrc={featuredImageFallback} alt={featuredProduct?.name || 'Плитка'} />
+          </div>
+        </section>
+      )}
       <section>
         <div className="section-title"><h2>Разделы из выгрузки</h2></div>
         <div className="category-grid">
@@ -490,6 +616,8 @@ function HomeScreen({ categories, facets, products, search, setSearch, setCatego
           {visibleProducts.slice(0, 6).map((product) => <ProductCard key={product.externalId} product={product} onOpen={onOpen} />)}
         </div>
       </section>
+        </>
+      )}
     </main>
   );
 }
@@ -517,7 +645,8 @@ function CatalogScreen({
   sort,
   setSort,
   viewMode,
-  setViewMode
+  setViewMode,
+  brand
 }) {
   const selectedCategory = categoriesFlat.find((category) => category.externalId === categoryId);
   const categoryChips = (facets?.category || []).slice(0, 10);
@@ -528,7 +657,7 @@ function CatalogScreen({
 
   return (
     <main className="screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <div className="toolbar catalog-toolbar">
         <label className="search-box compact">
           <Search size={18} />
@@ -676,7 +805,7 @@ function CatalogMenuItem({ category, level, expanded, onToggle, onOpen }) {
   );
 }
 
-function CatalogMenuScreen({ categories, setCategoryId, setFilters, setSearch, setView, cartCount }) {
+function CatalogMenuScreen({ categories, setCategoryId, setFilters, setSearch, setView, cartCount, brand }) {
   const menuCategories = useMemo(() => getCatalogMenuCategories(categories), [categories]);
   const [expanded, setExpanded] = useState(() => new Set());
 
@@ -708,7 +837,7 @@ function CatalogMenuScreen({ categories, setCategoryId, setFilters, setSearch, s
 
   return (
     <main className="screen catalog-menu-screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <div className="breadcrumb">ДВ Керамик / Каталог товаров</div>
       <section className="catalog-menu-heading">
         <h1>Каталог товаров</h1>
@@ -1122,12 +1251,12 @@ function ImageViewer({ images, activeIndex, setActiveIndex, onClose, productName
   );
 }
 
-function ProductScreen({ product, setView, onAdd, cartCount }) {
+function ProductScreen({ product, setView, onAdd, cartCount, brand }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   return (
     <main className="screen product-screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <button className="back-button" onClick={() => setView('catalog')}><ArrowLeft size={18} /> Каталог</button>
       <ProductGallery product={product} />
       <h1 className="page-title detail-title">{displayName}</h1>
@@ -1156,11 +1285,11 @@ function ProductScreen({ product, setView, onAdd, cartCount }) {
   );
 }
 
-function CartScreen({ cart, setCart, setView, cartCount }) {
+function CartScreen({ cart, setCart, setView, cartCount, brand }) {
   const items = getCartItems(cart);
   return (
     <main className="screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <h1 className="page-title">Корзина</h1>
       {!items.length ? <div className="empty">Корзина пока пустая</div> : null}
       <div className="cart-list">
@@ -1189,7 +1318,7 @@ function CartScreen({ cart, setCart, setView, cartCount }) {
   );
 }
 
-function CheckoutScreen({ cart, platform, setCart, setView, cartCount }) {
+function CheckoutScreen({ cart, platform, setCart, setView, cartCount, brand }) {
   const [form, setForm] = useState({ name: platform.user?.firstName || '', phone: '', deliveryMethod: 'pickup', comment: '' });
   const [status, setStatus] = useState('');
   const items = getCartItems(cart);
@@ -1216,7 +1345,7 @@ function CheckoutScreen({ cart, platform, setCart, setView, cartCount }) {
 
   return (
     <main className="screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       <button className="back-button" onClick={() => setView('cart')}><ArrowLeft size={18} /> Корзина</button>
       <h1 className="page-title">Заявка менеджеру</h1>
       <form className="checkout-form" onSubmit={submit}>
@@ -1238,15 +1367,15 @@ function AdminEntry({ setView }) {
   return (
     <section className="admin-entry">
       <div>
-        <strong>Admin Panel</strong>
-        <span>Settings, Visitors, Orders, Import status</span>
+        <strong>Админ-панель</strong>
+        <span>Настройки, посетители, заявки и импорт</span>
       </div>
-      <button className="secondary" onClick={() => setView('admin')}>Open</button>
+      <button className="secondary" onClick={() => setView('admin')}>Открыть</button>
     </section>
   );
 }
 
-function OrdersScreen({ platform, me, setView, cartCount }) {
+function OrdersScreen({ platform, me, setView, cartCount, brand }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -1255,7 +1384,7 @@ function OrdersScreen({ platform, me, setView, cartCount }) {
 
   return (
     <main className="screen">
-      <AppHeader cartCount={cartCount} setView={setView} />
+      <AppHeader cartCount={cartCount} setView={setView} brand={brand} />
       {me?.isAdmin ? <AdminEntry setView={setView} /> : null}
       <h1 className="page-title">Заявки</h1>
       {loading ? <div className="empty">Загружаем...</div> : null}
@@ -1265,7 +1394,7 @@ function OrdersScreen({ platform, me, setView, cartCount }) {
           <article className="order-card" key={order.id}>
             <strong>Заявка #{order.id.slice(0, 8)}</strong>
             <span>{new Date(order.createdAt).toLocaleString('ru-RU')}</span>
-            <b>{order.status}</b>
+            <b>{formatOrderStatus(order.status)}</b>
             <p>{order.items.map((item) => `${item.productName} x${item.quantity}`).join(', ')}</p>
           </article>
         ))}
@@ -1276,14 +1405,14 @@ function OrdersScreen({ platform, me, setView, cartCount }) {
 
 function AdminGuard({ me, setView, children }) {
   if (!me) {
-    return <main className="screen"><div className="empty">Checking access...</div></main>;
+    return <main className="screen"><div className="empty">Проверяем доступ...</div></main>;
   }
   if (!me.isAdmin) {
     return (
       <main className="screen">
-        <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Back</button>
-        <h1 className="page-title">Admin Panel</h1>
-        <div className="empty">Admin access is not available for this user.</div>
+        <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Назад</button>
+        <h1 className="page-title">Админ-панель</h1>
+        <div className="empty">Для этого пользователя доступ администратора закрыт.</div>
       </main>
     );
   }
@@ -1292,14 +1421,14 @@ function AdminGuard({ me, setView, children }) {
 
 function AdminMenu({ setView }) {
   const items = [
-    ['adminSettings', 'Settings', 'Feed, public URL, import status'],
-    ['adminVisitors', 'Visitors', 'Recent Mini App visitors'],
-    ['adminOrders', 'Orders', 'All submitted requests']
+    ['adminSettings', 'Настройки', 'Логотип, фид, публичная ссылка и импорт'],
+    ['adminVisitors', 'Посетители', 'Последние открытия Mini App'],
+    ['adminOrders', 'Заявки', 'Все отправленные обращения']
   ];
   return (
     <main className="screen">
-      <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Orders</button>
-      <h1 className="page-title">Admin Panel</h1>
+      <button className="back-button" onClick={() => setView('orders')}><ArrowLeft size={18} /> Заявки</button>
+      <h1 className="page-title">Админ-панель</h1>
       <div className="admin-grid">
         {items.map(([view, title, description]) => (
           <button key={view} className="admin-card" onClick={() => setView(view)}>
@@ -1312,24 +1441,50 @@ function AdminMenu({ setView }) {
   );
 }
 
-function AdminSettingsScreen({ platform, setView }) {
+function AdminSettingsScreen({ platform, setView, onBrandChange }) {
   const [settings, setSettings] = useState(null);
+  const [brandForm, setBrandForm] = useState(DEFAULT_BRAND);
   const [status, setStatus] = useState('');
+  const [brandStatus, setBrandStatus] = useState('');
+  const [savingBrand, setSavingBrand] = useState(false);
 
   const load = () => {
     setStatus('');
     apiGet('/api/admin/settings', {}, platform)
-      .then((data) => setSettings(data.settings))
+      .then((data) => {
+        const nextSettings = data.settings;
+        const nextBrand = { ...DEFAULT_BRAND, ...(nextSettings?.brand || {}) };
+        setSettings(nextSettings);
+        setBrandForm(nextBrand);
+        onBrandChange?.(nextBrand);
+      })
       .catch((error) => setStatus(error.message));
   };
 
   useEffect(load, []);
 
+  const saveBrand = async () => {
+    setSavingBrand(true);
+    setBrandStatus('Сохраняем бренд...');
+    try {
+      const data = await apiPost('/api/admin/settings/brand', { brand: brandForm }, platform);
+      const nextBrand = { ...DEFAULT_BRAND, ...(data.brand || {}) };
+      setBrandForm(nextBrand);
+      setSettings((current) => ({ ...(current || {}), brand: nextBrand }));
+      onBrandChange?.(nextBrand);
+      setBrandStatus('Бренд сохранен.');
+    } catch (error) {
+      setBrandStatus(error.message);
+    } finally {
+      setSavingBrand(false);
+    }
+  };
+
   const runImport = async () => {
-    setStatus('Running import...');
+    setStatus('Запускаем импорт...');
     try {
       const data = await apiPost('/api/admin/import/run', {}, platform);
-      setStatus(`Import completed: ${data.import.categoriesTotal} categories, ${data.import.offersTotal} products.`);
+      setStatus(`Импорт завершен: категорий ${data.import.categoriesTotal}, товаров ${data.import.offersTotal}.`);
       load();
     } catch (error) {
       setStatus(error.message);
@@ -1338,23 +1493,51 @@ function AdminSettingsScreen({ platform, setView }) {
 
   return (
     <main className="screen">
-      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
-      <h1 className="page-title">Settings</h1>
-      {!settings ? <div className="empty">Loading settings...</div> : (
-        <section className="admin-details">
-          <div><span>Feed URL</span><b>{settings.feedUrl}</b></div>
-          <div><span>Mini App URL</span><b>{settings.miniappPublicUrl || 'not configured'}</b></div>
-          <div><span>Telegram notifications</span><b>{settings.telegramNotificationsConfigured ? 'configured' : 'not configured'}</b></div>
-          <div><span>Last import status</span><b>{settings.latestImport?.status || 'not available'}</b></div>
-          <div><span>Last import time</span><b>{formatDateTime(settings.latestImport?.finished_at || settings.latestImport?.finishedAt)}</b></div>
-          <div><span>Imported categories</span><b>{settings.latestImport?.categories_total ?? settings.counts?.active_categories ?? 0}</b></div>
-          <div><span>Imported products</span><b>{settings.latestImport?.offers_total ?? settings.counts?.active_products ?? 0}</b></div>
-          <div><span>Hidden products</span><b>{settings.latestImport?.products_hidden ?? settings.counts?.hidden_products ?? 0}</b></div>
-          <div><span>Visitors</span><b>{settings.counts?.visitors_total ?? 0}</b></div>
-          <div><span>Orders</span><b>{settings.counts?.orders_total ?? 0}</b></div>
-        </section>
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Админка</button>
+      <h1 className="page-title">Настройки</h1>
+      {!settings ? <div className="empty">Загружаем настройки...</div> : (
+        <>
+          <section className="admin-settings-card">
+            <h2>Бренд и логотип</h2>
+            <div className="brand-preview">
+              <BrandMark brand={brandForm} />
+              <span>
+                <strong>{brandForm.title || DEFAULT_BRAND.title}</strong>
+                <small>{brandForm.subtitle || DEFAULT_BRAND.subtitle}</small>
+              </span>
+            </div>
+            <label>
+              <span>Название</span>
+              <input value={brandForm.title} maxLength={80} onChange={(event) => setBrandForm({ ...brandForm, title: event.target.value })} />
+            </label>
+            <label>
+              <span>Подпись</span>
+              <input value={brandForm.subtitle} maxLength={120} onChange={(event) => setBrandForm({ ...brandForm, subtitle: event.target.value })} />
+            </label>
+            <label>
+              <span>URL логотипа</span>
+              <input inputMode="url" placeholder="https://..." value={brandForm.logoUrl} onChange={(event) => setBrandForm({ ...brandForm, logoUrl: event.target.value })} />
+            </label>
+            <p>Используйте прямую ссылку на изображение в формате PNG, JPG, SVG или WebP. Если поле пустое, будет показан знак “ДК”.</p>
+            <button className="primary full" type="button" onClick={saveBrand} disabled={savingBrand}>{savingBrand ? 'Сохраняем...' : 'Сохранить бренд'}</button>
+            {brandStatus ? <div className="status-line">{brandStatus}</div> : null}
+          </section>
+
+          <section className="admin-details">
+            <div><span>YML-фид</span><b>{settings.feedUrl}</b></div>
+            <div><span>Публичная ссылка Mini App</span><b>{settings.miniappPublicUrl || 'не настроена'}</b></div>
+            <div><span>Уведомления в Telegram</span><b>{settings.telegramNotificationsConfigured ? 'настроены' : 'не настроены'}</b></div>
+            <div><span>Последний статус импорта</span><b>{settings.latestImport?.status || 'нет данных'}</b></div>
+            <div><span>Время последнего импорта</span><b>{formatDateTime(settings.latestImport?.finished_at || settings.latestImport?.finishedAt)}</b></div>
+            <div><span>Категорий импортировано</span><b>{settings.latestImport?.categories_total ?? settings.counts?.active_categories ?? 0}</b></div>
+            <div><span>Товаров импортировано</span><b>{settings.latestImport?.offers_total ?? settings.counts?.active_products ?? 0}</b></div>
+            <div><span>Скрытых товаров</span><b>{settings.latestImport?.products_hidden ?? settings.counts?.hidden_products ?? 0}</b></div>
+            <div><span>Посетителей</span><b>{settings.counts?.visitors_total ?? 0}</b></div>
+            <div><span>Заявок</span><b>{settings.counts?.orders_total ?? 0}</b></div>
+          </section>
+        </>
       )}
-      <button className="primary full" onClick={runImport}>Run import now</button>
+      <button className="primary full" onClick={runImport}>Запустить импорт сейчас</button>
       {status ? <div className="status-line">{status}</div> : null}
     </main>
   );
@@ -1371,19 +1554,19 @@ function AdminVisitorsScreen({ platform, setView }) {
 
   return (
     <main className="screen">
-      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
-      <h1 className="page-title">Visitors</h1>
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Админка</button>
+      <h1 className="page-title">Посетители</h1>
       {status ? <div className="status-line">{status}</div> : null}
-      {!data ? <div className="empty">Loading visitors...</div> : null}
-      {data && !data.visitors.length ? <div className="empty">No visitors yet.</div> : null}
+      {!data ? <div className="empty">Загружаем посетителей...</div> : null}
+      {data && !data.visitors.length ? <div className="empty">Посетителей пока нет.</div> : null}
       <div className="admin-list">
         {(data?.visitors || []).map((visitor) => (
           <article className="admin-card static" key={visitor.id}>
-            <strong>{visitor.username ? `@${visitor.username}` : visitor.firstName || visitor.telegramUserId || 'Anonymous visitor'}</strong>
-            <span>ID: {visitor.telegramUserId || 'anonymous'} · {visitor.source}</span>
-            <span>Visits: {visitor.visitsCount} · Orders: {visitor.ordersCount}</span>
-            <span>First seen: {formatDateTime(visitor.firstSeenAt)}</span>
-            <span>Last seen: {formatDateTime(visitor.lastSeenAt)}</span>
+            <strong>{visitor.username ? `@${visitor.username}` : visitor.firstName || visitor.telegramUserId || 'Анонимный посетитель'}</strong>
+            <span>ID: {visitor.telegramUserId || 'анонимно'} · {visitor.source}</span>
+            <span>Открытий: {visitor.visitsCount} · Заявок: {visitor.ordersCount}</span>
+            <span>Первый визит: {formatDateTime(visitor.firstSeenAt)}</span>
+            <span>Последний визит: {formatDateTime(visitor.lastSeenAt)}</span>
           </article>
         ))}
       </div>
@@ -1402,19 +1585,19 @@ function AdminOrdersScreen({ platform, setView }) {
 
   return (
     <main className="screen">
-      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Admin</button>
-      <h1 className="page-title">Orders</h1>
+      <button className="back-button" onClick={() => setView('admin')}><ArrowLeft size={18} /> Админка</button>
+      <h1 className="page-title">Заявки</h1>
       {status ? <div className="status-line">{status}</div> : null}
-      {!data ? <div className="empty">Loading orders...</div> : null}
-      {data && !data.orders.length ? <div className="empty">No orders yet.</div> : null}
+      {!data ? <div className="empty">Загружаем заявки...</div> : null}
+      {data && !data.orders.length ? <div className="empty">Заявок пока нет.</div> : null}
       <div className="admin-list">
         {(data?.orders || []).map((order) => (
           <article className="order-card" key={order.id}>
-            <strong>Order #{order.id.slice(0, 8)}</strong>
-            <span>{formatDateTime(order.createdAt)} · {order.status}</span>
+            <strong>Заявка #{order.id.slice(0, 8)}</strong>
+            <span>{formatDateTime(order.createdAt)} · {formatOrderStatus(order.status)}</span>
             <span>{order.customerName} · {order.phone}</span>
-            <span>Telegram: {order.username ? `@${order.username}` : order.telegramUserId || 'not provided'}</span>
-            <span>Total: {formatPrice(order.totalPrice, 'RUB')}</span>
+            <span>Telegram: {order.username ? `@${order.username}` : order.telegramUserId || 'не указан'}</span>
+            <span>Итого: {formatPrice(order.totalPrice, 'RUB')}</span>
             {order.comment ? <p>{order.comment}</p> : null}
             <p>{order.items.map((item) => `${item.productName} / ${item.sku} x${item.quantity}`).join(', ')}</p>
           </article>
@@ -1441,6 +1624,8 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [cart, setCart] = useState(loadCart());
   const [me, setMe] = useState(null);
+  const [brand, setBrand] = useState(DEFAULT_BRAND);
+  const [homeBanners, setHomeBanners] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const catalogRequestRef = useRef(0);
   const filtersOpenRef = useRef(false);
@@ -1452,6 +1637,10 @@ function App() {
   useEffect(() => {
     platform.ready();
     apiGet('/api/catalog/categories').then((data) => setCategories(data.categories || []));
+    apiGet('/api/app/settings').then((data) => {
+      setBrand({ ...DEFAULT_BRAND, ...(data.settings?.brand || {}) });
+      setHomeBanners(data.settings?.homeBanners || []);
+    }).catch(() => {});
     apiGet('/api/me', {}, platform).then(setMe).catch(() => setMe({ user: null, isAdmin: false }));
     apiPost('/api/visits', { source: platform.name }, platform).catch(() => {});
   }, []);
@@ -1577,15 +1766,15 @@ function App() {
 
   return (
     <div className="app-shell">
-      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} />}
-      {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} />}
-      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} />}
-      {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} />}
-      {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} />}
-      {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} cartCount={cartCount} />}
+      {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} />}
+      {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} brand={brand} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
+      {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} />}
+      {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
+      {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
+      {view === 'orders' && <OrdersScreen platform={platform} me={me} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'admin' && <AdminGuard me={me} setView={setView}><AdminMenu setView={setView} /></AdminGuard>}
-      {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} /></AdminGuard>}
+      {view === 'adminSettings' && <AdminGuard me={me} setView={setView}><AdminSettingsScreen platform={platform} setView={setView} onBrandChange={setBrand} /></AdminGuard>}
       {view === 'adminVisitors' && <AdminGuard me={me} setView={setView}><AdminVisitorsScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'adminOrders' && <AdminGuard me={me} setView={setView}><AdminOrdersScreen platform={platform} setView={setView} /></AdminGuard>}
       {view === 'catalog' ? <FloatingFilterButton onClick={openFilters} count={selectedFiltersCount} /> : null}

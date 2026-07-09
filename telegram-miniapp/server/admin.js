@@ -1,8 +1,16 @@
 import { query } from './db.js';
 import { getTelegramIdentity } from './telegram.js';
 import { importDvKeramikFeed } from './importer.js';
+import { getHomeBanners } from './banners.js';
 
 const PAGE_LIMIT_MAX = 100;
+const BRAND_SETTING_KEY = 'brand';
+const BRAND_DEFAULTS = {
+  title: 'ДВ Керамик',
+  subtitle: 'каталог обновляется ежедневно',
+  logoUrl: '',
+  initials: 'ДК'
+};
 
 function splitEnvList(value) {
   return String(value || '')
@@ -88,12 +96,12 @@ export function requireAdmin(req) {
 
   const identity = getTelegramIdentity(req, { allowDev: false, requireVerified: true });
   if (!identity) {
-    const error = new Error('Authentication required');
+    const error = new Error('Нужна авторизация через Telegram');
     error.statusCode = 401;
     throw error;
   }
   if (!isConfiguredAdmin(identity)) {
-    const error = new Error('Admin access required');
+    const error = new Error('Нет доступа администратора');
     error.statusCode = 403;
     throw error;
   }
@@ -104,6 +112,80 @@ function pagination(queryParams) {
   const page = Math.max(1, Number.parseInt(queryParams.page, 10) || 1);
   const limit = Math.min(PAGE_LIMIT_MAX, Math.max(1, Number.parseInt(queryParams.limit, 10) || 30));
   return { page, limit, offset: (page - 1) * limit };
+}
+
+function cleanText(value, fallback, maxLength) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  return (text || fallback).slice(0, maxLength);
+}
+
+function cleanLogoUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (url.length > 2048) {
+    const error = new Error('URL логотипа слишком длинный');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    const error = new Error('Укажите корректный URL логотипа');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    const error = new Error('URL логотипа должен начинаться с http:// или https://');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return parsed.toString();
+}
+
+async function getSetting(key) {
+  const result = await query('SELECT value FROM app_settings WHERE key = $1', [key]);
+  return result.rows[0]?.value || null;
+}
+
+async function upsertSetting(key, value) {
+  await query(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES ($1, $2::jsonb, now())
+    ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value,
+          updated_at = now()
+  `, [key, JSON.stringify(value)]);
+}
+
+export async function getBrandSettings() {
+  const saved = await getSetting(BRAND_SETTING_KEY);
+  return {
+    ...BRAND_DEFAULTS,
+    ...(saved && typeof saved === 'object' ? saved : {})
+  };
+}
+
+export async function getPublicAppSettings() {
+  return {
+    brand: await getBrandSettings(),
+    homeBanners: await getHomeBanners()
+  };
+}
+
+export async function updateAdminBrandSettings(input = {}) {
+  const brand = {
+    title: cleanText(input.title, BRAND_DEFAULTS.title, 80),
+    subtitle: cleanText(input.subtitle, BRAND_DEFAULTS.subtitle, 120),
+    logoUrl: cleanLogoUrl(input.logoUrl),
+    initials: cleanText(input.initials, BRAND_DEFAULTS.initials, 6)
+  };
+
+  await upsertSetting(BRAND_SETTING_KEY, brand);
+  return brand;
 }
 
 export async function getAdminSettings() {
@@ -128,6 +210,7 @@ export async function getAdminSettings() {
     feedUrl: process.env.DVKERAMIK_YML_URL || 'https://dvkeramik.ru/yml_get/26',
     miniappPublicUrl: process.env.MINIAPP_PUBLIC_URL || null,
     telegramNotificationsConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_ADMIN_CHAT_ID),
+    brand: await getBrandSettings(),
     latestImport,
     counts
   };
