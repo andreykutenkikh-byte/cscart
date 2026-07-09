@@ -438,7 +438,7 @@ function UnitPriceDisplay({ product, variant = 'card' }) {
   );
 }
 
-function ProductCard({ product, onOpen, onAdd, viewMode = 'list' }) {
+function ProductCard({ product, onOpen, viewMode = 'list' }) {
   if (!product) return null;
   const displayName = formatDisplayTitle(product.name);
   const cardImageFallback = product.remoteImageUrl || product.imageUrl;
@@ -466,12 +466,6 @@ function ProductCard({ product, onOpen, onAdd, viewMode = 'list' }) {
           </div>
         </div>
       </div>
-      {onAdd ? (
-        <button className="product-card__cart" type="button" onClick={() => onAdd(product)} aria-label={`Добавить в корзину ${product.name}`}>
-          <ShoppingCart size={15} />
-          <span>В корзину</span>
-        </button>
-      ) : null}
     </article>
   );
 }
@@ -675,7 +669,6 @@ function CatalogScreen({
   setSearch,
   setView,
   onOpen,
-  onAdd,
   onOpenFilters,
   onLoadMore,
   loading,
@@ -768,7 +761,6 @@ function CatalogScreen({
             key={product.externalId}
             product={product}
             onOpen={onOpen}
-            onAdd={onAdd}
             viewMode={viewMode}
           />
         ))}
@@ -1802,7 +1794,7 @@ function App() {
     <div className="app-shell">
       {view === 'home' && <HomeScreen categories={categories} facets={facets} products={products} search={search} setSearch={setSearch} setCategoryId={setCategoryId} setFilters={setFilters} setView={setView} onOpen={openProduct} cartCount={cartCount} brand={brand} homeBanners={homeBanners} loading={loading} />}
       {view === 'catalogMenu' && <CatalogMenuScreen categories={categories} setCategoryId={setCategoryId} setFilters={setFilters} setSearch={setSearch} setView={setView} cartCount={cartCount} brand={brand} />}
-      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onAdd={onAdd} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
+      {view === 'catalog' && <CatalogScreen categoriesFlat={categoriesFlat} categoryId={categoryId} setCategoryId={setCategoryId} products={products} pagination={pagination} facets={facets} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} setView={setView} onOpen={openProduct} onOpenFilters={openFilters} onLoadMore={loadMoreProducts} loading={loading} loadingMore={loadingMore} loadError={loadMoreError} cartCount={cartCount} sort={sort} setSort={setSort} viewMode={catalogViewMode} setViewMode={setCatalogViewMode} brand={brand} />}
       {view === 'product' && <ProductScreen product={selectedProduct} setView={setView} onAdd={onAdd} cartCount={cartCount} brand={brand} />}
       {view === 'cart' && <CartScreen cart={cart} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
       {view === 'checkout' && <CheckoutScreen cart={cart} platform={platform} setCart={setCart} setView={setView} cartCount={cartCount} brand={brand} />}
