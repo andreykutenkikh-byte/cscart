@@ -1042,11 +1042,16 @@ button {
 
 .catalog-unit-switcher {
   flex: 0 0 auto;
+  grid-template-columns: repeat(2, 34px);
+  gap: 3px;
   border-radius: 16px;
 }
 
 .catalog-unit-switcher button {
-  min-height: 30px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
   border-radius: 12px;
 }
 
